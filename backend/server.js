@@ -8,6 +8,7 @@ import path from "path";
 import connectDB from "./config/db.js";
 import Student from "./models/Student.js";
 import Professional from "./models/Professional.js";
+import authRoutes from "./routes/auth.js";
 
 dotenv.config(); // grab the secret stuff from my .env file
 
@@ -16,6 +17,9 @@ app.use(express.json()); // lets the server read json data
 app.use(cors()); // lets my frontend talk to this backend
 
 connectDB(); // connect to mongodb using the shared file
+
+// login / sign up API (assignment #6)
+app.use("/api/auth", authRoutes);
 
 // this is the setup for handling résumé uploads
 const storage = multer.diskStorage({
