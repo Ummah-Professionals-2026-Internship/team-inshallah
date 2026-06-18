@@ -1,19 +1,21 @@
-const mongoose = require("mongoose");
+import mongoose from "mongoose";
 
 const professionalSchema = new mongoose.Schema({
   name: { type: String, required: true, maxlength: 255 },
   phone: { type: String, required: true },
-  linkedin: { type: String },
+  gender: { type: String, required: true },
   experienceLevel: { type: String, required: true },
   employer: { type: String, required: true },
   jobTitle: { type: String, required: true },
   industry: { type: String, required: true },
   volunteeringFor: { type: String, required: true },
   major: { type: String },
-  almaMater: { type: String },
-  countyState: { type: String },
-  hearAboutService: { type: String },
+  almaMater: { type: String},
+  mentorOpposingGender: { type: String, required: true },
+  resume: { type: String, required: true },
+  countyState: { type: String, required: true },
+  hearAboutService: { type: String, required: true },
   otherInformation: { type: String },
 }, { timestamps: true });
 
-module.exports = mongoose.model("Professional", professionalSchema);
+export default mongoose.model("Professional", professionalSchema);
