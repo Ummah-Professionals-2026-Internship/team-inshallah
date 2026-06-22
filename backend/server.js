@@ -9,6 +9,7 @@ import { S3Client, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import connectDB from "./config/db.js";
 import Student from "./models/Student.js";
 import Professional from "./models/Professional.js";
+import authRoutes from "./routes/auth.js";
 
 dotenv.config();
 
@@ -17,6 +18,9 @@ app.use(express.json());
 app.use(cors());
 
 connectDB();
+
+// login / sign up API (assignment #6)
+app.use("/api/auth", authRoutes);
 
 // ===== AWS S3 SETUP =====
 const s3 = new S3Client({
@@ -37,7 +41,7 @@ const fileFilter = (req, file, cb) => {
   }
 };
 
-// multer now sends files straight to S3 instead of a local folder
+// multer sends files straight to S3 instead of a local folder
 const upload = multer({
   fileFilter,
   limits: { fileSize: 5 * 1024 * 1024 },
@@ -48,7 +52,6 @@ const upload = multer({
       cb(null, { fieldName: file.fieldname });
     },
     key: (req, file, cb) => {
-      // give each résumé a unique name in the bucket
       const uniqueName = `resumes/resume-${Date.now()}${path.extname(file.originalname)}`;
       cb(null, uniqueName);
     },
