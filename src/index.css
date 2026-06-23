@@ -77,20 +77,24 @@ h1 {
   font-size: 56px;
   letter-spacing: -1.68px;
   margin: 32px 0;
+
   @media (max-width: 1024px) {
     font-size: 36px;
     margin: 20px 0;
   }
 }
+
 h2 {
   font-size: 24px;
   line-height: 118%;
   letter-spacing: -0.24px;
   margin: 0 0 8px;
+
   @media (max-width: 1024px) {
     font-size: 20px;
   }
 }
+
 p {
   margin: 0;
 }
@@ -108,4 +112,119 @@ code {
   line-height: 135%;
   padding: 4px 8px;
   background: var(--code-bg);
+}
+
+
+/* brand font kit */
+
+@font-face {
+  font-family: "Kollektif";
+  src: url("./assets/Brand Kit/Kollektif.ttf") format("truetype");
+  font-weight: 400;
+  /* regular weight */
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Kollektif";
+  src: url("./assets/Brand Kit/Kollektif-Bold.ttf") format("truetype");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Kollektif";
+  src: url("./assets/Brand Kit/Kollektif-Italic.ttf") format("truetype");
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Kollektif";
+  src: url("./assets/Brand Kit/Kollektif-BoldItalic.ttf") format("truetype");
+  font-weight: 700;
+  font-style: italic;
+  font-display: swap;
+}
+
+:root {
+  /* brand color palette */
+  --color-teal: #007CA6;
+  /* primary - buttons, headings, icons */
+  --color-teal-light: #8ACBDB;
+  /* secondary teal - card borders, accents */
+  --color-yellow: #FDBB37;
+  /* accent yellow — highlights, badges */
+  --color-navy-dark: #00212C;
+  /* darkest navy — backgrounds, overlays */
+  --color-navy-mid: #003F55;
+  /* mid navy — hover states, secondary bg */
+  --color-grey-light: #E7E8EE;
+  /* light grey — input backgrounds, dividers */
+
+  --brand-primary: var(--color-teal);
+  --brand-primary-hover: var(--color-navy-mid);
+  --brand-border: var(--color-teal-light);
+  --brand-accent: var(--color-yellow);
+  --brand-bg-dark: var(--color-navy-dark);
+  --brand-input-bg: #ffffff;
+  --brand-input-border: #d0d5dd;
+  --brand-placeholder: var(--color-teal);
+  --brand-text: #1a1a1a;
+  --brand-text-muted: #555;
+
+  --font-brand: "Kollektif", "Segoe UI", Arial, sans-serif;
+
+  font-family: var(--font-brand);
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--brand-text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--brand-bg-dark);
+  overflow-x: hidden;
+}
+
+ul,
+ol {
+  list-style: none;
+}
+
+a {
+  text-decoration: none;
+  color: inherit;
+}
+
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--brand-primary);
+  outline-offset: 2px;
+}
+
+img {
+  display: block;
+  max-width: 100%;
+}
+
+#root {
+  min-height: 100svh;
+  width: 100%;
 }
