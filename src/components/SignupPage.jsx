@@ -1,16 +1,15 @@
-// main login screen
+// signup screen
 
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import styles from "./LoginPage.module.css";
-
+import styles from "./SignupPage.module.css";
 
 // import brand kit assets
 import logoFull from "../assets/Brand Kit/Logos/PNGs/horizontal white.png";
 import logoIcon from "../assets/Brand Kit/Logos/PNGs/icon blue.png";
 import bgPhoto from "../assets/Brand Kit/careerprep-bg.jpg";
 
-export default function LoginPage() {
+export default function SignupPage() {
 
     const navigate = useNavigate();
 
@@ -20,17 +19,15 @@ export default function LoginPage() {
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
 
-    // handle login form submission
-    const handleLogin = (e) => {
-        e.preventDefault(); // Prevent default browser form submission
-        console.log("Login attempt:", { role, email, password });
+    // handle signup form submission
+    const handleSignup = (e) => {
+        e.preventDefault();
+        console.log({ role, email, password });
     };
 
-    // handle "sign up" link click
-    const handleSignUp = () => {
-        console.log("Navigate to Sign Up");
-        navigate("/signup");
-
+    // handle "login" link click
+    const handleLogin = () => {
+        navigate("/");
     };
 
     return (
@@ -42,55 +39,47 @@ export default function LoginPage() {
 
             {/* top left logo + title */}
             <div className={styles.brandLockup}>
-                <img
-                    src={logoFull}
-                    alt="Ummah Professionals logo"
-                    className={styles.brandLogo}
-                />
+                <img src={logoFull} alt="Ummah Professionals" className={styles.brandLogo} />
                 <p className={styles.brandTagline}>Career Prep Services</p>
             </div>
 
-            {/* center login card */}
+            {/* center signup card */}
             <div className={styles.cardOverlay}>
                 <div className={styles.card}>
 
-                    {/* up logo + login card */}
-                    <img
-                        src={logoIcon}
-                        alt="UP icon"
-                        className={styles.cardIcon}
-                    />
+                    {/* up logo + signup card */}
+                    <img src={logoIcon} alt="UP" className={styles.cardIcon} />
 
-                    <h1 className={styles.cardTitle}>Login</h1>
+                    <h1 className={styles.cardTitle}>Sign Up</h1>
 
                     {/* role toggle, switch b/w prof & student */}
-                    <p className={styles.roleLabel}>Log in as:</p>
+                    <p className={styles.roleLabel}>Sign up as:</p>
                     <div className={styles.roleToggle}>
 
                         {/* student tab */}
                         <button
-                            className={`${styles.roleBtn} ${role === "student" ? styles.roleBtnActive : ""}`}
-                            onClick={() => setRole("student")}
                             type="button"
+                            onClick={() => setRole("student")}
+                            className={`${styles.roleBtn} ${role === "student" ? styles.roleBtnActive : ""}`}
                         >
                             Student
                         </button>
 
                         {/* professional tab */}
                         <button
-                            className={`${styles.roleBtn} ${role === "professional" ? styles.roleBtnActive : ""}`}
-                            onClick={() => setRole("professional")}
                             type="button"
+                            onClick={() => setRole("professional")}
+                            className={`${styles.roleBtn} ${role === "professional" ? styles.roleBtnActive : ""}`}
                         >
                             Professional
                         </button>
 
                     </div>
 
-                    {/* login form */}
-                    <form onSubmit={handleLogin} className={styles.form}>
+                    {/* signup form */}
+                    <form onSubmit={handleSignup} className={styles.form}>
 
-                        {/* email input */}
+                        {/* email input + svg icon */}
                         <div className={styles.inputRow}>
                             <svg className={styles.inputIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
                                 <rect x="2" y="4" width="20" height="16" rx="2" />
@@ -109,7 +98,7 @@ export default function LoginPage() {
 
                         {/* password input */}
                         <div className={styles.inputRow}>
-                            {/* SVG lock icon */}
+                            {/* svg lock icon */}
                             <svg className={styles.inputIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
                                 <rect x="5" y="11" width="14" height="10" rx="2" />
                                 <path d="M8 11V7a4 4 0 0 1 8 0v4" />
@@ -121,26 +110,26 @@ export default function LoginPage() {
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
                                 required
-                                autoComplete="current-password"
+                                autoComplete="new-password"
                             />
                         </div>
 
-                        {/* login button */}
+                        {/* submit button */}
                         <button className={styles.loginBtn} type="submit">
-                            Login
+                            Get Started
                         </button>
 
                     </form>
 
-                    {/* sign up button */}
+                    {/* login link */}
                     <p className={styles.signupText}>
-                        <span className={styles.signupQuestion}>Don&apos;t have an account?</span>{" "}
+                        <span className={styles.signupQuestion}>Have an account?</span>{" "}
                         <button
                             className={styles.signupLink}
-                            onClick={handleSignUp}
+                            onClick={handleLogin}
                             type="button"
                         >
-                            Sign Up
+                            Login
                         </button>
                     </p>
 

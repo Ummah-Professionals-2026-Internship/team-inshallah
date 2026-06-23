@@ -1,0 +1,258 @@
+/* set the bg photo & center the login card */
+.pageWrapper {
+    position: relative;
+    min-height: 100svh;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background-size: cover;
+    background-position: center top;
+    background-repeat: no-repeat;
+}
+
+/* dark overlay */
+.pageWrapper::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: rgba(79, 82, 85, 0.45);
+    z-index: 0;
+}
+
+/* top left corner */
+.brandLockup {
+    position: absolute;
+    top: 28px;
+    left: 32px;
+    z-index: 1;
+
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.brandLogo {
+    height: 48px;
+    width: auto;
+    object-fit: contain;
+}
+
+.brandTagline {
+    color: #ffffff;
+    font-family: var(--font-brand);
+    font-size: 1rem;
+    font-weight: 400;
+    letter-spacing: 0.02em;
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+}
+
+/* login card */
+.cardOverlay {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    max-width: 440px;
+    padding: 16px;
+}
+
+.card {
+    background: rgba(255, 255, 255, 0.97);
+    border: 2px solid var(--brand-border);
+    border-radius: 18px;
+    padding: 40px 36px 32px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    box-shadow: 0 12px 48px rgba(0, 33, 44, 0.22);
+}
+
+.cardIcon {
+    width: 88px;
+    height: 88px;
+    object-fit: contain;
+    border-radius: 20px;
+    margin-bottom: 14px;
+}
+
+.cardTitle {
+    font-family: var(--font-brand);
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--brand-primary);
+    margin: 0 0 16px;
+    letter-spacing: -0.02em;
+}
+
+/* role label */
+.roleLabel {
+    align-self: flex-start;
+    font-family: var(--font-brand);
+    font-size: 0.83rem;
+    font-weight: 700;
+    color: var(--brand-primary);
+    letter-spacing: 0.02em;
+    margin-bottom: 8px;
+}
+
+.roleToggle {
+    display: flex;
+    width: 100%;
+    background: var(--color-grey-light);
+    border: 1.5px solid #c8cad0;
+    border-radius: 10px;
+    overflow: hidden;
+    margin-bottom: 22px;
+}
+
+.roleBtn {
+    flex: 1;
+    padding: 11px 0;
+    font-family: var(--font-brand);
+    font-size: 0.9rem;
+    font-weight: 400;
+    color: var(--brand-text-muted);
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    border-radius: 8px;
+    transition: background 0.18s ease, color 0.18s ease, font-weight 0.1s;
+}
+
+.roleBtnActive {
+    background: var(--color-navy-mid);
+    color: #ffffff;
+    font-weight: 700;
+}
+
+.roleBtn:not(.roleBtnActive):hover {
+    background: rgba(0, 124, 166, 0.1);
+    color: var(--brand-primary);
+}
+
+.form {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    width: 100%;
+}
+
+.inputRow {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--brand-input-bg);
+    border: 1.5px solid var(--brand-input-border);
+    border-radius: 10px;
+    padding: 0 14px;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.inputRow:focus-within {
+    border-color: var(--brand-primary);
+    box-shadow: 0 0 0 3px rgba(0, 124, 166, 0.12);
+}
+
+.inputIcon {
+    width: 18px;
+    height: 18px;
+    color: var(--brand-primary);
+    flex-shrink: 0;
+}
+
+.input {
+    flex: 1;
+    border: none;
+    outline: none;
+    background: transparent;
+    padding: 13px 0;
+    font-family: var(--font-brand);
+    font-size: 0.95rem;
+    color: var(--brand-text);
+}
+
+.input::placeholder {
+    color: var(--brand-placeholder);
+    font-family: var(--font-brand);
+}
+
+.loginBtn {
+    width: 100%;
+    padding: 14px 0;
+    margin-top: 4px;
+    font-family: var(--font-brand);
+    font-size: 1rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: #ffffff;
+    background: var(--brand-primary);
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: background 0.18s ease, transform 0.1s ease;
+}
+
+.loginBtn:hover {
+    background: var(--brand-primary-hover);
+}
+
+.loginBtn:active {
+    transform: scale(0.98);
+}
+
+
+.signupText {
+    margin-top: 20px;
+    font-family: var(--font-brand);
+    font-size: 0.88rem;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.signupQuestion {
+    color: var(--brand-primary);
+}
+
+.signupLink {
+    background: none;
+    border: none;
+    padding: 0;
+    font-family: var(--font-brand);
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: var(--brand-text);
+    cursor: pointer;
+    transition: color 0.15s;
+}
+
+.signupLink:hover {
+    color: var(--brand-primary);
+    text-decoration: underline;
+}
+
+@media (max-width: 480px) {
+
+    .card {
+        padding: 28px 20px 24px;
+        border-radius: 14px;
+    }
+
+    .brandLockup {
+        top: 16px;
+        left: 16px;
+    }
+
+    .brandLogo {
+        height: 38px;
+    }
+
+    .brandTagline {
+        font-size: 0.85rem;
+    }
+
+    .cardTitle {
+        font-size: 1.6rem;
+    }
+}
