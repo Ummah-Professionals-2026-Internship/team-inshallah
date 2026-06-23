@@ -1,86 +1,103 @@
 import express from "express";
 import cors from "cors";
-import validator from "validator";
 import dotenv from "dotenv";
 import multer from "multer";
+import multerS3 from "multer-s3";
 import path from "path";
+import { S3Client, DeleteObjectCommand } from "@aws-sdk/client-s3";
 
 import connectDB from "./config/db.js";
 import Student from "./models/Student.js";
 import Professional from "./models/Professional.js";
 import authRoutes from "./routes/auth.js";
 
-dotenv.config(); // grab the secret stuff from my .env file
+dotenv.config();
 
 const app = express();
-app.use(express.json()); // lets the server read json data
-app.use(cors()); // lets my frontend talk to this backend
+app.use(express.json());
+app.use(cors());
 
-connectDB(); // connect to mongodb using the shared file
+connectDB();
 
 // login / sign up API (assignment #6)
 app.use("/api/auth", authRoutes);
 
-// this is the setup for handling résumé uploads
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, "uploads/"); // put the file in the uploads folder
-  },
-  filename: (req, file, cb) => {
-    // give the file its own name so they don't overwrite each other
-    const uniqueName = `resume-${Date.now()}${path.extname(file.originalname)}`;
-    cb(null, uniqueName);
+// ===== AWS S3 SETUP =====
+const s3 = new S3Client({
+  region: process.env.AWS_REGION,
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
   },
 });
 
-// only let people upload pdfs or word docs
 const fileFilter = (req, file, cb) => {
   const allowedTypes = [".pdf", ".doc", ".docx"];
   const ext = path.extname(file.originalname).toLowerCase();
   if (allowedTypes.includes(ext)) {
-    cb(null, true); // file is fine, allow it
+    cb(null, true);
   } else {
-    cb(new Error("Only PDF and Word documents are allowed"), false); // nope
+    cb(new Error("Only PDF and Word documents are allowed"), false);
   }
 };
 
+// multer sends files straight to S3 instead of a local folder
 const upload = multer({
-  storage,
   fileFilter,
-  limits: { fileSize: 5 * 1024 * 1024 }, // max file size is 5mb
+  limits: { fileSize: 5 * 1024 * 1024 },
+  storage: multerS3({
+    s3: s3,
+    bucket: process.env.AWS_BUCKET_NAME,
+    metadata: (req, file, cb) => {
+      cb(null, { fieldName: file.fieldname });
+    },
+    key: (req, file, cb) => {
+      const uniqueName = `resumes/resume-${Date.now()}${path.extname(file.originalname)}`;
+      cb(null, uniqueName);
+    },
+  }),
 });
 
-// cleans up text so no weird/harmful characters get through
-const clean = (value) =>
-  typeof value === "string" ? validator.escape(value.trim()) : value;
+// helper to delete a file from S3 (used when validation fails)
+const deleteFromS3 = async (key) => {
+  try {
+    await s3.send(
+      new DeleteObjectCommand({
+        Bucket: process.env.AWS_BUCKET_NAME,
+        Key: key,
+      })
+    );
+  } catch (err) {
+    console.log("Failed to delete S3 file:", err);
+  }
+};
 
-// all the fields the student form can send
+// ===== HELPERS =====
+const clean = (value) =>
+  typeof value === "string" ? value.trim() : value;
+
 const studentFields = [
   "name", "phone", "gender", "industry", "major",
   "desiredFutureCareer", "currentJob", "academicStanding",
   "hearAboutService", "otherInformation",
 ];
-// the student fields that MUST be filled in
 const requiredStudentFields = [
   "name", "phone", "gender", "industry", "major",
   "desiredFutureCareer", "academicStanding", "hearAboutService",
 ];
 
-// all the fields the professional form can send
 const professionalFields = [
   "name", "phone", "gender", "experienceLevel", "employer",
   "jobTitle", "industry", "volunteeringFor", "major",
   "almaMater", "mentorOpposingGender", "countyState",
   "hearAboutService", "otherInformation",
 ];
-// the professional fields that MUST be filled in
 const requiredProfessionalFields = [
   "name", "phone", "gender", "experienceLevel", "employer",
   "jobTitle", "industry", "volunteeringFor",
   "mentorOpposingGender", "countyState", "hearAboutService",
 ];
 
-// takes the incoming data, keeps only the allowed fields, and cleans them
 const buildData = (body, allowedFields) => {
   const data = {};
   for (const field of allowedFields) {
@@ -91,40 +108,46 @@ const buildData = (body, allowedFields) => {
   return data;
 };
 
-// checks which required fields are empty or missing
 const findMissing = (data, requiredFields) =>
-  requiredFields.filter((field) => !data[field] || data[field].trim() === "");
+  requiredFields.filter(
+    (field) =>
+      !data[field] ||
+      (typeof data[field] === "string" && data[field].trim() === "")
+  );
 
-// when the student form gets submitted, this runs
+// ===== STUDENT endpoint =====
 app.post("/api/student", upload.single("resume"), async (req, res) => {
   try {
-    const data = buildData(req.body, studentFields); // grab + clean the data
-    const missing = findMissing(data, requiredStudentFields); // see what's missing
+    const data = buildData(req.body, studentFields);
+    const missing = findMissing(data, requiredStudentFields);
 
-    // résumé is required, so if there's no file, that's missing too
     if (!req.file) {
       missing.push("resume");
     }
 
-    // if anything required is missing, send back an error and stop
     if (missing.length > 0) {
+      // delete the orphaned résumé from S3 if validation failed
+      if (req.file) {
+        await deleteFromS3(req.file.key);
+      }
       return res.status(400).json({
         message: `Missing required fields: ${missing.join(", ")}`,
       });
     }
 
-    data.resume = req.file.path; // save the résumé's file path
+    // store the S3 file location (URL) in MongoDB
+    data.resume = req.file.location;
 
-    const student = new Student(data); // make the record
-    await student.save(); // save it to mongodb
-    res.status(201).json({ message: "Student submission saved!", student }); // success
+    const student = new Student(data);
+    await student.save();
+    res.status(201).json({ message: "Student submission saved!", student });
   } catch (err) {
-    console.log("ERROR:", err); // show me the real error if something breaks
+    console.log("ERROR:", err);
     res.status(500).json({ message: "Server error. Please try again later." });
   }
 });
 
-// when the professional form gets submitted, this runs (same idea as student)
+// ===== PROFESSIONAL endpoint =====
 app.post("/api/professional", upload.single("resume"), async (req, res) => {
   try {
     const data = buildData(req.body, professionalFields);
@@ -135,12 +158,15 @@ app.post("/api/professional", upload.single("resume"), async (req, res) => {
     }
 
     if (missing.length > 0) {
+      if (req.file) {
+        await deleteFromS3(req.file.key);
+      }
       return res.status(400).json({
         message: `Missing required fields: ${missing.join(", ")}`,
       });
     }
 
-    data.resume = req.file.path;
+    data.resume = req.file.location;
 
     const professional = new Professional(data);
     await professional.save();
@@ -151,7 +177,6 @@ app.post("/api/professional", upload.single("resume"), async (req, res) => {
   }
 });
 
-// turn the server on and have it listen for submissions
 app.listen(process.env.PORT, () => {
   console.log(`Server running on port ${process.env.PORT}`);
 });
