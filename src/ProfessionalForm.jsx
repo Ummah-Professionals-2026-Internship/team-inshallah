@@ -36,8 +36,23 @@ export default function ProfessionalForm() {
 
   function validate() {
     const errors = {};
-    if (!form.name.trim()) errors.name = 'Name is required.';
-    if (!form.phone.trim()) errors.phone = 'Phone number is required.';
+    if (!form.name.trim())
+        { 
+            errors.name = 'Name is required.';
+        }
+    else if (!/^[a-zA-Z\s'-]+$/.test(form.name.trim())) 
+        {
+            errors.name = 'Name can only contain letters, spaces, hyphens, and apostrophes.';
+        }
+    
+    if (!form.phone.trim()) 
+        {
+            errors.phone = 'Phone number is required.';
+        } 
+    else if (!/^\d{7,15}$/.test(form.phone.replace(/[\s\-()]/g, ''))) 
+        {
+            errors.phone = 'Please enter a valid phone number (digits only).';
+        }
     if (!form.gender) errors.gender = 'Please select a gender.';
     if (!form.experienceLevel) errors.experienceLevel = 'Please select your experience level.';
     if (!form.employer.trim()) errors.employer = 'Employer is required.';
@@ -47,7 +62,19 @@ export default function ProfessionalForm() {
     if (!form.mentorOpposingGender) errors.mentorOpposingGender = 'Please select an option.';
     if (!form.countyState.trim()) errors.countyState = 'County / State is required.';
     if (!form.hearAboutService) errors.hearAboutService = 'Please select how you heard about us.';
-    if (!form.resume) errors.resume = 'Please upload your résumé.';
+    if (!form.resume) 
+        {
+            errors.resume = 'Please upload your résumé.';
+        } 
+    else 
+        {
+            const okTypes = ['.pdf', '.doc', '.docx'];
+            const name = form.resume.name.toLowerCase();
+            if (!okTypes.some(ext => name.endsWith(ext))) 
+                {
+                    errors.resume = 'Résumé must be a PDF or Word document.';
+                }
+        }
     return errors;
 }
 
