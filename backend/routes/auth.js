@@ -15,6 +15,7 @@ const publicUser = (user) => ({
   id: user._id,
   email: user.email,
   role: user.role,
+  emailVerified: user.emailVerified,
   createdAt: user.createdAt,
 });
 
