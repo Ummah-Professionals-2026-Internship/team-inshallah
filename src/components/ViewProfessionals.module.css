@@ -1,0 +1,128 @@
+.panel {
+  width: 100%;
+  min-height: 100vh;
+  padding: 32px 56px 24px;
+  background: #ffffff;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.title {
+  margin: 0;
+  font-family: "Kollektif", system-ui, sans-serif;
+  font-size: 2.6rem;
+  font-weight: 800;
+  color: #007ca6;
+  letter-spacing: -0.02em;
+}
+
+.closeBtn {
+  background: none;
+  border: none;
+  font-size: 2rem;
+  line-height: 1;
+  color: #1a1a1a;
+  cursor: pointer;
+  padding: 4px 10px;
+  border-radius: 8px;
+  transition: background 0.15s ease;
+}
+
+.closeBtn:hover {
+  background: #f1f3f5;
+}
+
+.closeBtn:focus-visible {
+  outline: 2px solid #007ca6;
+  outline-offset: 2px;
+}
+
+.subheading {
+  margin: 32px 0 28px;
+  text-align: left;
+  font-family: "Montserrat", system-ui, sans-serif;
+  font-size: 1.5rem;
+  font-weight: 400;
+  color: #1a1a1a;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 56px 48px;
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: auto;
+  padding-bottom: 32px;
+}
+
+.arrowBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 16px;
+  border: none;
+  background: #ffffff;
+  color: #1a1a1a;
+  cursor: pointer;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.arrowBtn:hover {
+  transform: scale(1.05);
+}
+
+.dots {
+  display: flex;
+  gap: 8px;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #d0d4da;
+}
+
+.dotActive {
+  background: #007ca6;
+}
+
+@media (max-width: 1024px) {
+  .grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .panel {
+    padding: 24px 24px 24px;
+  }
+  .title {
+    font-size: 2.1rem;
+  }
+}
+
+@media (max-width: 680px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+  .title {
+    font-size: 1.7rem;
+  }
+  .subheading {
+    font-size: 1.25rem;
+  }
+}
