@@ -10,6 +10,8 @@ import connectDB from "./config/db.js";
 import Student from "./models/Student.js";
 import Professional from "./models/Professional.js";
 import authRoutes from "./routes/auth.js";
+import emailVerificationRoutes from "./routes/emailVerification.js";
+
 
 dotenv.config();
 
@@ -21,6 +23,8 @@ connectDB();
 
 // login / sign up API (assignment #6)
 app.use("/api/auth", authRoutes);
+
+app.use("/api/email-verification", emailVerificationRoutes);
 
 // ===== AWS S3 SETUP =====
 const s3 = new S3Client({
