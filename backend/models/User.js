@@ -17,6 +17,7 @@ const userSchema = new mongoose.Schema(
       enum: ["student", "professional"],
       default: "student",
     },
+    emailVerified: { type: Boolean, default: false },
   },
   { timestamps: true } // adds createdAt + updatedAt automatically
 );

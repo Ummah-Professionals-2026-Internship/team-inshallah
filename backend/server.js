@@ -9,7 +9,7 @@ import connectDB from "./config/db.js";
 import Student from "./models/Student.js";
 import Professional from "./models/Professional.js";
 import authRoutes from "./routes/auth.js";
-
+import emailVerificationRoutes from "./routes/emailVerification.js";
 dotenv.config(); // grab the secret stuff from my .env file
 
 const app = express();
@@ -21,6 +21,8 @@ connectDB(); // connect to mongodb using the shared file
 // login / sign up API (assignment #6)
 app.use("/api/auth", authRoutes);
 
+// email verification API (assignment #7) -- Umar
+app.use("/api/email-verification", emailVerificationRoutes);
 // this is the setup for handling résumé uploads
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
