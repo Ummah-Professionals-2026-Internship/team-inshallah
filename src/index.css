@@ -119,7 +119,7 @@ code {
 
 @font-face {
   font-family: "Kollektif";
-  src: url("./assets/Brand Kit/Kollektif.ttf") format("truetype");
+  src: url("./assets/Brand Kit/kollektif/Kollektif.ttf") format("truetype");
   font-weight: 400;
   /* regular weight */
   font-style: normal;
@@ -128,7 +128,7 @@ code {
 
 @font-face {
   font-family: "Kollektif";
-  src: url("./assets/Brand Kit/Kollektif-Bold.ttf") format("truetype");
+  src: url("./assets/Brand Kit/kollektif/Kollektif-Bold.ttf") format("truetype");
   font-weight: 700;
   font-style: normal;
   font-display: swap;
@@ -136,7 +136,7 @@ code {
 
 @font-face {
   font-family: "Kollektif";
-  src: url("./assets/Brand Kit/Kollektif-Italic.ttf") format("truetype");
+  src: url("./assets/Brand Kit/kollektif/Kollektif-Italic.ttf") format("truetype");
   font-weight: 400;
   font-style: italic;
   font-display: swap;
@@ -144,7 +144,7 @@ code {
 
 @font-face {
   font-family: "Kollektif";
-  src: url("./assets/Brand Kit/Kollektif-BoldItalic.ttf") format("truetype");
+  src: url("./assets/Brand Kit/kollektif/Kollektif-BoldItalic.ttf") format("truetype");
   font-weight: 700;
   font-style: italic;
   font-display: swap;

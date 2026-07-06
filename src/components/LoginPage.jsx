@@ -6,8 +6,8 @@ import styles from "./LoginPage.module.css";
 
 
 // import brand kit assets
-import logoFull from "../assets/Brand Kit/Logos/PNGs/horizontal white.png";
-import logoIcon from "../assets/Brand Kit/Logos/PNGs/icon blue.png";
+import logoFull from "../assets/Brand Kit/Logos/SVGs/horizontal white.svg";
+import logoIcon from "../assets/Brand Kit/Logos/SVGs/icon blue with white bg.svg";
 import bgPhoto from "../assets/Brand Kit/careerprep-bg.jpg";
 
 export default function LoginPage() {
@@ -21,16 +21,31 @@ export default function LoginPage() {
     const [password, setPassword] = useState("");
 
     // handle login form submission
-    const handleLogin = (e) => {
-        e.preventDefault(); // Prevent default browser form submission
-        console.log("Login attempt:", { role, email, password });
+    const handleLogin = async (e) => {
+        e.preventDefault();
+        try {
+            const res = await fetch("http://localhost:5050/api/auth/login", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ email, password, role }),
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                alert(data.message);
+                return;
+            }
+            // save token + user info for later
+            localStorage.setItem("token", data.token);
+            localStorage.setItem("user", JSON.stringify(data.user));
+            navigate(data.user.role === "student" ? "/student-dashboard" : "/professional-dashboard");
+        } catch (err) {
+            alert("something went wrong. is the server running?");
+        }
     };
 
     // handle "sign up" link click
     const handleSignUp = () => {
-        console.log("Navigate to Sign Up");
         navigate("/signup");
-
     };
 
     return (

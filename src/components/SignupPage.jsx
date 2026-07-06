@@ -5,8 +5,8 @@ import { useNavigate } from "react-router-dom";
 import styles from "./SignupPage.module.css";
 
 // import brand kit assets
-import logoFull from "../assets/Brand Kit/Logos/PNGs/horizontal white.png";
-import logoIcon from "../assets/Brand Kit/Logos/PNGs/icon blue.png";
+import logoFull from "../assets/Brand Kit/Logos/SVGs/horizontal white.svg";
+import logoIcon from "../assets/Brand Kit/Logos/SVGs/icon blue with white bg.svg";
 import bgPhoto from "../assets/Brand Kit/careerprep-bg.jpg";
 
 export default function SignupPage() {
@@ -20,9 +20,24 @@ export default function SignupPage() {
     const [password, setPassword] = useState("");
 
     // handle signup form submission
-    const handleSignup = (e) => {
+    const handleSignUp = async (e) => {
         e.preventDefault();
-        console.log({ role, email, password });
+        try {
+            const res = await fetch("http://localhost:5050/api/auth/signup", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ email, password, role }),
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                alert(data.message);
+                return;
+            }
+            // go to email verification before letting them in
+            navigate("/verify", { state: { email } });
+        } catch (err) {
+            alert("something went wrong. is the server running?");
+        }
     };
 
     // handle "login" link click
@@ -77,7 +92,7 @@ export default function SignupPage() {
                     </div>
 
                     {/* signup form */}
-                    <form onSubmit={handleSignup} className={styles.form}>
+                    <form onSubmit={handleSignUp} className={styles.form}>
 
                         {/* email input + svg icon */}
                         <div className={styles.inputRow}>
