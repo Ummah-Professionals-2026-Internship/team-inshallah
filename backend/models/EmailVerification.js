@@ -5,7 +5,7 @@ const emailVerificationSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: true,
-    unique: true, // one active verification record per user
+    unique: true,
   },
   hashedCode: {
     type: String,
@@ -13,15 +13,18 @@ const emailVerificationSchema = new mongoose.Schema({
   },
   expiresAt: {
     type: Date,
-    required: true, // we'll set this to "now + 1 hour" in the route
+    required: true,
   },
   lastSentAt: {
     type: Date,
-    default: Date.now, // used later for the resend cooldown
+    default: Date.now,
+  },
+  attempts: {
+    type: Number,
+    default: 0, // counts failed verify attempts; lock out after a max
   },
 });
 
-// TTL index: Mongo will delete the document once expiresAt is in the past
 emailVerificationSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
 export default mongoose.model('EmailVerification', emailVerificationSchema);

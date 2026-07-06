@@ -10,8 +10,8 @@ const router = express.Router();
 
 const CODE_TTL_MS = 60 * 60 * 1000;     // 1 hour
 const RESEND_COOLDOWN_MS = 60 * 1000;   // 60 seconds
+const MAX_ATTEMPTS = 5;                 // lock out after this many wrong codes
 
-// ===== REQUEST a verification code =====
 router.post('/request', requireAuth, async (req, res) => {
   try {
     const userId = req.userId;
@@ -35,13 +35,16 @@ router.post('/request', requireAuth, async (req, res) => {
     const code = crypto.randomInt(10000, 100000).toString();
     const hashedCode = await bcrypt.hash(code, 10);
 
+    // Send the email FIRST. If this throws, we never write the record,
+    // so a failed send doesn't trap the user in the resend cooldown.
+    await sendVerificationEmail(user.email, code);
+
+    // Only after a successful send do we store the code (attempts reset to 0).
     await EmailVerification.findOneAndUpdate(
       { userId },
-      { userId, hashedCode, expiresAt: new Date(Date.now() + CODE_TTL_MS), lastSentAt: new Date() },
+      { userId, hashedCode, expiresAt: new Date(Date.now() + CODE_TTL_MS), lastSentAt: new Date(), attempts: 0 },
       { upsert: true, new: true }
     );
-
-    await sendVerificationEmail(user.email, code);
 
     return res.json({ message: 'Verification code sent' });
   } catch (err) {
@@ -50,7 +53,6 @@ router.post('/request', requireAuth, async (req, res) => {
   }
 });
 
-// ===== VERIFY a submitted code =====
 router.post('/verify', requireAuth, async (req, res) => {
   try {
     const userId = req.userId;
@@ -75,9 +77,23 @@ router.post('/verify', requireAuth, async (req, res) => {
       return res.status(400).json({ error: 'Verification code has expired. Please request a new one.' });
     }
 
+    // Too many wrong attempts: block and force a new code.
+    if (record.attempts >= MAX_ATTEMPTS) {
+      await EmailVerification.deleteOne({ userId });
+      return res.status(429).json({ error: 'Too many incorrect attempts. Please request a new code.' });
+    }
+
     const isMatch = await bcrypt.compare(code, record.hashedCode);
     if (!isMatch) {
-      return res.status(400).json({ error: 'Incorrect verification code' });
+      // Count this failed attempt.
+      record.attempts += 1;
+      await record.save();
+      const remaining = MAX_ATTEMPTS - record.attempts;
+      return res.status(400).json({
+        error: remaining > 0
+          ? `Incorrect verification code. ${remaining} attempt(s) remaining.`
+          : 'Incorrect verification code. No attempts remaining — request a new code.',
+      });
     }
 
     user.emailVerified = true;
