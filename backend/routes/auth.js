@@ -2,6 +2,7 @@ import express from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
+import { requireAuth } from "../middleware/auth.js";
 
 // Assignment #6 - Login & Sign Up API
 //   POST /api/auth/signup -> create an account (writes to the database)
@@ -14,6 +15,7 @@ const publicUser = (user) => ({
   id: user._id,
   email: user.email,
   role: user.role,
+  emailVerified: user.emailVerified,
   createdAt: user.createdAt,
 });
 
@@ -101,6 +103,24 @@ router.post("/login", async (req, res) => {
     return res.json({ user: publicUser(user), token: createToken(user) });
   } catch (err) {
     console.log("LOGIN ERROR:", err);
+    return res
+      .status(500)
+      .json({ message: "Server error. Please try again later." });
+  }
+});
+
+// --- Current user ---
+// GET /api/auth/me -> returns the logged-in user (requires a valid token).
+// the frontend calls this on page load to know who is signed in and stay logged in.
+router.get("/me", requireAuth, async (req, res) => {
+  try {
+    const user = await User.findById(req.userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found." });
+    }
+    return res.json({ user: publicUser(user) });
+  } catch (err) {
+    console.log("ME ERROR:", err);
     return res
       .status(500)
       .json({ message: "Server error. Please try again later." });

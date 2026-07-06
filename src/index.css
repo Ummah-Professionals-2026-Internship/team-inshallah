@@ -1,3 +1,17 @@
+@font-face {
+  font-family: "Kollektif";
+  src: url("./assets/Brand Kit/kollektif/Kollektif.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "Kollektif";
+  src: url("./assets/Brand Kit/kollektif/Kollektif-Bold.ttf") format("truetype");
+  font-weight: 700;
+  font-style: normal;
+}
+
 :root {
   --text: #6b6375;
   --text-h: #08060d;
@@ -52,14 +66,11 @@
 
 body {
   margin: 0;
+  background: #ffffff;
 }
 
 #root {
-  width: 1126px;
-  max-width: 100%;
-  margin: 0 auto;
-  text-align: center;
-  border-inline: 1px solid var(--border);
+  width: 100%;
   min-height: 100svh;
   display: flex;
   flex-direction: column;
