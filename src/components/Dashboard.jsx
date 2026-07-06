@@ -1,17 +1,19 @@
 // shared dashboard layout - used by both the professional and student dashboards
-// the role-specific wrapper components pass in their own todo items + nav links
 import { useState } from "react";
 import styles from "./Dashboard.module.css";
 import logoFull from "../assets/Brand Kit/Logos/PNGs/horizontal blue.png";
+import inboxIcon from "../assets/inbox chat button.png";
 
 export default function Dashboard({
   userName,
-  userRole, // "Professional" or "Student"
+  userRole,
   profilePhoto,
-  navLinks, // array of { label, href }
-  todoItems, // array of strings
-  upcomingMeetings, // array of meeting objects
+  navLinks,
+  todoItems,
+  upcomingMeetings,
   previousMeetings,
+  onNavClick,
+  children, // Captures ViewProfessionals component when active
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [checked, setChecked] = useState({});
@@ -22,7 +24,6 @@ export default function Dashboard({
 
   return (
     <div className={styles.page}>
-      {/* header: logo, user info, burger button */}
       <header className={styles.header}>
         <div className={styles.brand}>
           <div>
@@ -32,17 +33,18 @@ export default function Dashboard({
         </div>
 
         <div className={styles.userArea}>
-          <a href="/profile" className={styles.userText}>
+          <div className={styles.userText}>
             <p className={styles.userName}>{userName}</p>
-            <p className={styles.userMeta}>{userRole} &bull; View Profile</p>
-          </a>
+            <p className={styles.userMeta}>{userRole}</p>
+          </div>
           <div className={styles.avatar}>
             {profilePhoto ? (
               <img src={profilePhoto} alt={userName} />
             ) : (
-              <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22">
-                <circle cx="12" cy="8" r="4" />
-                <path d="M4 20c0-4.4 3.6-8 8-8s8 3.6 8 8" />
+              <svg viewBox="0 0 100 100" fill="none" width="100%" height="100%">
+                <circle cx="50" cy="50" r="50" fill="#b9bcc3" />
+                <circle cx="50" cy="38" r="18" fill="#ffffff" />
+                <ellipse cx="50" cy="85" rx="30" ry="22" fill="#ffffff" />
               </svg>
             )}
           </div>
@@ -52,7 +54,22 @@ export default function Dashboard({
             onClick={() => setMenuOpen((open) => !open)}
             aria-label="Toggle menu"
             aria-expanded={menuOpen}
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "space-between",
+              alignItems: "stretch",
+              width: "36px",
+              height: "26px",
+              background: "transparent",
+              border: "none",
+              cursor: "pointer",
+              padding: "0",
+              boxSizing: "border-box",
+              flexShrink: 0,
+            }}
           >
+            <span />
             <span />
             <span />
             <span />
@@ -60,94 +77,106 @@ export default function Dashboard({
         </div>
       </header>
 
-      {/* nav bar - only shows when burger button is clicked */}
       {menuOpen && (
         <nav className={styles.navBar}>
           <button type="button" className={styles.chatIcon} aria-label="Messages">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" width="32" height="32">
-              <path d="M3 11a6 6 0 0 1 6-6h2a6 6 0 0 1 0 12H7l-4 3v-4a5.97 5.97 0 0 1-0-5z" />
-              <line x1="6" y1="9" x2="13" y2="9" />
-              <line x1="6" y1="12" x2="11" y2="12" />
-              <rect x="13" y="13" width="9" height="6.5" rx="1" />
-              <path d="M13 13.5l4.5 3 4.5-3" />
-            </svg>
+            <img src={inboxIcon} alt="Messages" className={styles.inboxIcon} />
           </button>
           <div className={styles.navLinks}>
             {navLinks.map((link) => (
-              <a key={link.label} href={link.href} className={styles.navLink}>
+              <button
+                key={link.label}
+                type="button"
+                className={styles.navLinkButton}
+                onClick={() => {
+                  setMenuOpen(false); // Closes menu drawer dropdown overlay row panel
+                  if (onNavClick) {
+                    onNavClick(link.label); // Dispatches layout variable updates
+                  }
+                }}
+              >
                 {link.label}
-              </a>
+              </button>
             ))}
           </div>
         </nav>
       )}
 
-      {/* main content */}
       <main className={styles.main}>
-        <h1 className={styles.welcome}>Welcome {userName.split(" ")[0]}!</h1>
+        {/* CONDITIONAL SWITCH RENDERING AREA */}
+        {children ? (
+          /* Render your existing ViewProfessionals view file inside layout here */
+          children
+        ) : (
+          /* Otherwise show default workspace blocks */
+          <>
+            <h1 className={styles.welcome}>Welcome {userName.split(" ")[0]}!</h1>
 
-        <div className={styles.grid}>
-          <div className={styles.leftColumn}>
-            <section className={styles.container}>
-              <h2 className={styles.sectionTitle}>Upcoming Meetings</h2>
-              <div className={styles.sectionBox}>
-                {upcomingMeetings.length === 0 ? (
-                  <p className={styles.emptyText}>No upcoming meetings yet.</p>
-                ) : (
-                  upcomingMeetings.map((meeting) => (
-                    <div key={meeting.id} className={styles.meetingRow}>
-                      <p className={styles.meetingName}>{meeting.with}</p>
-                      <p className={styles.meetingDate}>{meeting.date}</p>
-                    </div>
-                  ))
-                )}
+            <div className={styles.grid}>
+              <div className={styles.leftColumn}>
+                <section className={styles.container}>
+                  <h2 className={styles.sectionTitle}>Upcoming Meetings</h2>
+                  <div className={styles.sectionBoxLarge}>
+                    {upcomingMeetings.length === 0 ? (
+                      <p className={styles.emptyText}>No upcoming meetings yet.</p>
+                    ) : (
+                      upcomingMeetings.map((meeting) => (
+                        <div key={meeting.id} className={styles.meetingRow}>
+                          <p className={styles.meetingName}>{meeting.with}</p>
+                          <p className={styles.meetingDate}>{meeting.date}</p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </section>
+
+                <section className={styles.container}>
+                  <h2 className={styles.sectionTitle}>Previous Meetings</h2>
+                  <div className={styles.sectionBoxSmall}>
+                    {previousMeetings.length === 0 ? (
+                      <p className={styles.emptyText}>No previous meetings yet.</p>
+                    ) : (
+                      previousMeetings.map((meeting) => (
+                        <div key={meeting.id} className={styles.meetingRow}>
+                          <p className={styles.meetingName}>{meeting.with}</p>
+                          <p className={styles.meetingDate}>{meeting.date}</p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </section>
               </div>
-            </section>
 
-            <section className={styles.container}>
-              <h2 className={styles.sectionTitle}>Previous Meetings</h2>
-              <div className={styles.sectionBox}>
-                {previousMeetings.length === 0 ? (
-                  <p className={styles.emptyText}>No previous meetings yet.</p>
-                ) : (
-                  previousMeetings.map((meeting) => (
-                    <div key={meeting.id} className={styles.meetingRow}>
-                      <p className={styles.meetingName}>{meeting.with}</p>
-                      <p className={styles.meetingDate}>{meeting.date}</p>
-                    </div>
-                  ))
-                )}
+              <div className={styles.rightColumn}>
+                <section className={styles.todoContainer}>
+                  <div className={styles.todoHeaderWrapper}>
+                    <h2 className={styles.todoBoxTitle}>To-Do List</h2>
+                  </div>
+                  <div className={styles.todoList}>
+                    {todoItems.map((item, index) => (
+                      <button
+                        key={item}
+                        type="button"
+                        className={styles.todoItem}
+                        onClick={() => toggleTodo(index)}
+                        aria-pressed={!!checked[index]}
+                      >
+                        <span
+                          className={`${styles.todoCircle} ${
+                            checked[index] ? styles.todoCircleChecked : ""
+                          }`}
+                        />
+                        <span className={checked[index] ? styles.todoTextChecked : ""}>
+                          {item}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </section>
               </div>
-            </section>
-          </div>
-
-          {/* general use container - starts as a to-do list */}
-          <section className={`${styles.container} ${styles.todoContainer}`}>
-            <h2 className={styles.sectionTitle}>To-Do List</h2>
-            <div className={styles.todoList}>
-              {todoItems.map((item, index) => (
-                <button
-                  key={item}
-                  type="button"
-                  className={styles.todoItem}
-                  onClick={() => toggleTodo(index)}
-                  aria-pressed={!!checked[index]}
-                >
-                  <span
-                    className={`${styles.todoCircle} ${
-                      checked[index] ? styles.todoCircleChecked : ""
-                    }`}
-                  />
-                  <span
-                    className={checked[index] ? styles.todoTextChecked : ""}
-                  >
-                    {item}
-                  </span>
-                </button>
-              ))}
             </div>
-          </section>
-        </div>
+          </>
+        )}
       </main>
     </div>
   );

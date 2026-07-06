@@ -1,9 +1,9 @@
-// dashboard shown to professionals - wraps the shared Dashboard with their nav links + filler data
+import { useState } from "react";
 import Dashboard from "./Dashboard";
 
 const PROFESSIONAL_NAV_LINKS = [
-  { label: "Home", href: "/" },
-  { label: "View Professionals", href: "/professionals" },
+  { label: "Home" },
+  { label: "Update Availability" },
 ];
 
 const PROFESSIONAL_TODO = [
@@ -13,10 +13,19 @@ const PROFESSIONAL_TODO = [
 ];
 
 const UPCOMING_MEETINGS = [];
-
 const PREVIOUS_MEETINGS = [];
 
 export default function ProfessionalDashboard({ userName = "Ashar Faisal" }) {
+  const [activeView, setActiveView] = useState("home");
+
+  const handleNavClick = (label) => {
+    if (label === "Update Availability") {
+      setActiveView("availability");
+    } else if (label === "Home") {
+      setActiveView("home");
+    }
+  };
+
   return (
     <Dashboard
       userName={userName}
@@ -26,6 +35,16 @@ export default function ProfessionalDashboard({ userName = "Ashar Faisal" }) {
       todoItems={PROFESSIONAL_TODO}
       upcomingMeetings={UPCOMING_MEETINGS}
       previousMeetings={PREVIOUS_MEETINGS}
-    />
+      onNavClick={handleNavClick}
+    >
+      {activeView === "availability" ? (
+        <div style={{ padding: "24px" }}>
+          <h1 style={{ color: "#0a7ea4", fontFamily: "Montserrat, sans-serif" }}>
+            Update Availability
+          </h1>
+          <p>Coming soon — this page is still being built.</p>
+        </div>
+      ) : null}
+    </Dashboard>
   );
 }

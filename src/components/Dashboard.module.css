@@ -19,14 +19,14 @@
 }
 
 .logoImg {
-  height: 48px;
+  height: 64px;
   width: auto;
   display: block;
 }
 
 .brandTagline {
   margin: 4px 0 0;
-  font-size: 0.85rem;
+  font-size: 1rem;
   font-weight: 500;
   color: #0a7ea4;
 }
@@ -34,7 +34,7 @@
 .userArea {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 24px;
 }
 
 .userText {
@@ -42,11 +42,6 @@
   text-decoration: none;
   cursor: pointer;
   display: block;
-}
-
-.userText:hover .userName,
-.userText:hover .userMeta {
-  text-decoration: underline;
 }
 
 .userName {
@@ -63,8 +58,8 @@
 }
 
 .avatar {
-  width: 48px;
-  height: 48px;
+  width: 80px;
+  height: 80px;
   border-radius: 50%;
   background: #b9bcc3;
   color: #ffffff;
@@ -82,28 +77,24 @@
 }
 
 .burgerBtn {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 5px;
-  width: 28px;
-  background: none;
+  background: transparent;
   border: none;
   cursor: pointer;
-  padding: 4px;
+  padding: 0;
+  box-sizing: border-box;
+  flex-shrink: 0;
 }
 
 .burgerBtn span {
   display: block;
-  height: 2.5px;
-  background: #0a7ea4;
-  border-radius: 2px;
+  height: 4px;
+  background: #3982a6;
+  width: 100%;
+  margin-bottom: 3px;
 }
 
-.burgerBtn:focus-visible {
-  outline: 2px solid #0a7ea4;
-  outline-offset: 3px;
-  border-radius: 4px;
+.burgerBtn span:last-child {
+  margin-bottom: 0;
 }
 
 .navBar {
@@ -117,10 +108,14 @@
 .chatIcon {
   background: none;
   border: none;
-  color: #ffffff;
   cursor: pointer;
   display: flex;
   align-items: center;
+}
+
+.inboxIcon {
+  width: 64px;
+  height: auto;
 }
 
 .navLinks {
@@ -128,15 +123,20 @@
   gap: 36px;
 }
 
-.navLink {
+/* Updated selector button configuration */
+.navLinkButton {
+  background: none;
+  border: none;
   color: #ffffff;
-  text-decoration: none;
+  font-family: "Montserrat", system-ui, sans-serif;
   font-size: 0.95rem;
   font-weight: 500;
   cursor: pointer;
+  padding: 0;
+  transition: text-decoration 0.15s ease;
 }
 
-.navLink:hover {
+.navLinkButton:hover {
   text-decoration: underline;
 }
 
@@ -157,7 +157,8 @@
 .grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 24px;
+  gap: 32px;
+  align-items: stretch;
 }
 
 .leftColumn {
@@ -166,13 +167,19 @@
   gap: 24px;
 }
 
+.rightColumn {
+  display: flex;
+  flex-direction: column;
+  padding-top: 44px;
+}
+
 .container {
   display: flex;
   flex-direction: column;
 }
 
 .sectionTitle {
-  margin: 0 0 6px;
+  margin: 0 0 12px;
   font-family: "Montserrat", system-ui, sans-serif;
   font-size: 32px;
   font-weight: 300;
@@ -181,64 +188,90 @@
   color: #1a1a1a;
 }
 
-.sectionBox {
+.sectionBoxLarge {
   border: 1px solid #d8dadf;
   border-radius: 4px;
-  min-height: 200px;
-  padding: 12px 8px;
+  min-height: 260px;
+  padding: 12px 16px;
+  background: #ffffff;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05), 0 1px 3px rgba(0, 0, 0, 0.03);
 }
 
-.todoContainer .sectionBox {
-  display: none;
+.sectionBoxSmall {
+  border: 1px solid #d8dadf;
+  border-radius: 4px;
+  min-height: 180px;
+  padding: 12px 16px;
+  background: #ffffff;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05), 0 1px 3px rgba(0, 0, 0, 0.03);
 }
 
-.emptyText {
-  display: none;
+.todoContainer {
+  border: 1px solid #d8dadf;
+  border-radius: 4px;
+  background: #ffffff;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05), 0 1px 3px rgba(0, 0, 0, 0.03);
+}
+
+.todoHeaderWrapper {
+  padding: 16px 20px 12px 20px;
+  border-bottom: 1px solid #eceef1;
+}
+
+.todoBoxTitle {
+  margin: 0;
+  font-family: "Montserrat", system-ui, sans-serif;
+  font-size: 32px;
+  font-weight: 400;
+  line-height: 1.1;
+  color: #1a1a1a;
 }
 
 .meetingRow {
   display: flex;
   justify-content: space-between;
-  padding: 10px 4px;
+  padding: 12px 4px;
   border-bottom: 1px solid #eceef1;
 }
 
 .meetingName {
   margin: 0;
-  font-size: 0.9rem;
+  font-size: 0.95rem;
   font-weight: 600;
   color: #1a1a1a;
 }
 
 .meetingDate {
   margin: 0;
-  font-size: 0.85rem;
+  font-size: 0.9rem;
   color: #6b6e75;
 }
 
 .todoList {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  border-top: 1px solid #d8dadf;
-  padding-top: 14px;
+  gap: 14px;
+  padding: 20px;
 }
 
 .todoItem {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 16px;
   background: #ffffff;
   border: 1px solid #d8dadf;
-  border-radius: 10px;
-  padding: 12px 16px;
+  border-radius: 30px;
+  padding: 14px 20px;
   cursor: pointer;
   text-align: left;
-  font-family: "Kollektif", system-ui, sans-serif;
+  font-family: "Montserrat", system-ui, sans-serif;
   font-size: 18px;
-  font-weight: 400;
-  line-height: 1;
-  letter-spacing: 0;
+  font-weight: 500;
+  line-height: 1.2;
   color: #1a1a1a;
   transition: background 0.15s ease;
 }
@@ -248,10 +281,10 @@
 }
 
 .todoCircle {
-  width: 18px;
-  height: 18px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
-  border: 1.5px solid #b9bcc3;
+  border: 1.5px solid #d8dadf;
   flex-shrink: 0;
   transition: background 0.15s ease, border-color 0.15s ease;
 }
@@ -266,9 +299,19 @@
   color: #8a8d94;
 }
 
+.emptyText {
+  margin: 0;
+  color: #8a8d94;
+  font-style: italic;
+  font-size: 0.95rem;
+}
+
 @media (max-width: 900px) {
   .grid {
     grid-template-columns: 1fr;
+  }
+  .rightColumn {
+    padding-top: 0;
   }
   .navLinks {
     gap: 20px;
@@ -281,8 +324,5 @@
   }
   .main {
     padding: 20px 18px 36px;
-  }
-  .userText {
-    display: none;
   }
 }
