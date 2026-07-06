@@ -1,4 +1,4 @@
-// shared dashboard layout - used by both the professional and student dashboards
+/// shared dashboard layout - used by both the professional and student dashboards
 import { useState } from "react";
 import styles from "./Dashboard.module.css";
 import logoFull from "../assets/Brand Kit/Logos/PNGs/horizontal blue.png";
@@ -13,7 +13,7 @@ export default function Dashboard({
   upcomingMeetings,
   previousMeetings,
   onNavClick,
-  children, // Captures ViewProfessionals component when active
+  children,
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [checked, setChecked] = useState({});
@@ -54,20 +54,6 @@ export default function Dashboard({
             onClick={() => setMenuOpen((open) => !open)}
             aria-label="Toggle menu"
             aria-expanded={menuOpen}
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              justifyContent: "space-between",
-              alignItems: "stretch",
-              width: "36px",
-              height: "26px",
-              background: "transparent",
-              border: "none",
-              cursor: "pointer",
-              padding: "0",
-              boxSizing: "border-box",
-              flexShrink: 0,
-            }}
           >
             <span />
             <span />
@@ -89,9 +75,9 @@ export default function Dashboard({
                 type="button"
                 className={styles.navLinkButton}
                 onClick={() => {
-                  setMenuOpen(false); // Closes menu drawer dropdown overlay row panel
+                  setMenuOpen(false);
                   if (onNavClick) {
-                    onNavClick(link.label); // Dispatches layout variable updates
+                    onNavClick(link.label);
                   }
                 }}
               >
@@ -103,12 +89,9 @@ export default function Dashboard({
       )}
 
       <main className={styles.main}>
-        {/* CONDITIONAL SWITCH RENDERING AREA */}
         {children ? (
-          /* Render your existing ViewProfessionals view file inside layout here */
           children
         ) : (
-          /* Otherwise show default workspace blocks */
           <>
             <h1 className={styles.welcome}>Welcome {userName.split(" ")[0]}!</h1>
 
