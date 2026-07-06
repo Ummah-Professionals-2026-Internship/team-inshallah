@@ -11,7 +11,7 @@ import Student from "./models/Student.js";
 import Professional from "./models/Professional.js";
 import authRoutes from "./routes/auth.js";
 import emailVerificationRoutes from "./routes/emailVerification.js";
-
+import { requireAuth } from "./middleware/auth.js";
 
 dotenv.config();
 
@@ -36,15 +36,19 @@ const s3 = new S3Client({
 });
 
 const fileFilter = (req, file, cb) => {
-  const allowedTypes = [".pdf", ".doc", ".docx"];
+  const resumeTypes = [".pdf", ".doc", ".docx"];
+  const imageTypes = [".jpg", ".jpeg", ".png", ".webp"];
+
   const ext = path.extname(file.originalname).toLowerCase();
-  if (allowedTypes.includes(ext)) {
+
+  if (file.fieldname === "resume" && resumeTypes.includes(ext)) {
+    cb(null, true);
+  } else if (file.fieldname === "profilePicture" && imageTypes.includes(ext)) {
     cb(null, true);
   } else {
-    cb(new Error("Only PDF and Word documents are allowed"), false);
+    cb(new Error("Invalid file type"), false);
   }
 };
-
 // multer sends files straight to S3 instead of a local folder
 const upload = multer({
   fileFilter,
@@ -56,7 +60,13 @@ const upload = multer({
       cb(null, { fieldName: file.fieldname });
     },
     key: (req, file, cb) => {
-      const uniqueName = `resumes/resume-${Date.now()}${path.extname(file.originalname)}`;
+      const folder =
+        file.fieldname === "profilePicture" ? "profile-pictures" : "resumes";
+
+      const uniqueName = `${folder}/${file.fieldname}-${Date.now()}${path.extname(
+        file.originalname
+      )}`;
+
       cb(null, uniqueName);
     },
   }),
@@ -119,8 +129,53 @@ const findMissing = (data, requiredFields) =>
       (typeof data[field] === "string" && data[field].trim() === "")
   );
 
+const isValidUrl = (value) => {
+  if (!value) return true;
+
+  try {
+    new URL(value);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const buildProfileData = (body, allowedFields) => {
+  const data = buildData(body, allowedFields);
+
+  data.aboutMe = clean(body.aboutMe || "");
+
+  data.externalLinks = {
+    linkedin: clean(body.linkedin || ""),
+    website: clean(body.website || ""),
+    github: clean(body.github || ""),
+    other: clean(body.other || ""),
+  };
+
+  return data;
+};
+
+const validateProfile = (data, requiredFields) => {
+  const missing = findMissing(data, requiredFields);
+
+  if (missing.length > 0) {
+    return `Missing required fields: ${missing.join(", ")}`;
+  }
+
+  if (data.aboutMe && data.aboutMe.length > 1000) {
+    return "About must be 1000 characters or less.";
+  }
+
+  if (!isValidUrl(data.externalLinks.linkedin)) return "LinkedIn URL is invalid.";
+  if (!isValidUrl(data.externalLinks.website)) return "Website URL is invalid.";
+  if (!isValidUrl(data.externalLinks.github)) return "GitHub URL is invalid.";
+  if (!isValidUrl(data.externalLinks.other)) return "Other link URL is invalid.";
+
+  return null;
+};
+
 // ===== STUDENT endpoint =====
-app.post("/api/student", upload.single("resume"), async (req, res) => {
+app.post("/api/student", requireAuth, upload.single("resume"), async (req, res) => {
   try {
     const data = buildData(req.body, studentFields);
     const missing = findMissing(data, requiredStudentFields);
@@ -141,6 +196,8 @@ app.post("/api/student", upload.single("resume"), async (req, res) => {
 
     // store the S3 file location (URL) in MongoDB
     data.resume = req.file.location;
+    data.user = req.userId;
+
 
     const student = new Student(data);
     await student.save();
@@ -151,8 +208,67 @@ app.post("/api/student", upload.single("resume"), async (req, res) => {
   }
 });
 
+// ===== GET STUDENT PROFILE =====
+app.get("/api/student/profile", requireAuth, async (req, res) => {
+  try {
+    const student = await Student.findOne({ user: req.userId });
+
+    if (!student) {
+      return res.status(404).json({ message: "Student profile not found." });
+    }
+
+    res.json({ profile: student });
+  } catch (err) {
+    console.log("GET STUDENT PROFILE ERROR:", err);
+    res.status(500).json({ message: "Server error. Please try again later." });
+  }
+});
+
+// ===== UPDATE STUDENT PROFILE =====
+app.put(
+  "/api/student/profile",
+  requireAuth,
+  upload.single("profilePicture"),
+  async (req, res) => {
+    try {
+      const student = await Student.findOne({ user: req.userId });
+
+      if (!student) {
+        return res.status(404).json({ message: "Student profile not found." });
+      }
+
+      const data = buildProfileData(req.body, studentFields);
+      const error = validateProfile(data, requiredStudentFields);
+
+      if (error) {
+        if (req.file) {
+          await deleteFromS3(req.file.key);
+        }
+
+        return res.status(400).json({ message: error });
+      }
+
+      if (req.file) {
+        data.profilePicture = req.file.location;
+      }
+
+      Object.assign(student, data);
+
+      await student.save();
+
+      res.json({
+        message: "Student profile updated successfully.",
+        profile: student,
+      });
+    } catch (err) {
+      console.log("UPDATE STUDENT PROFILE ERROR:", err);
+      res.status(500).json({ message: "Server error. Please try again later." });
+    }
+  }
+);
+
 // ===== PROFESSIONAL endpoint =====
-app.post("/api/professional", upload.single("resume"), async (req, res) => {
+app.post("/api/professional", requireAuth, upload.single("resume"), async (req, res) => {
   try {
     const data = buildData(req.body, professionalFields);
     const missing = findMissing(data, requiredProfessionalFields);
@@ -171,6 +287,7 @@ app.post("/api/professional", upload.single("resume"), async (req, res) => {
     }
 
     data.resume = req.file.location;
+    data.user = req.userId;
 
     const professional = new Professional(data);
     await professional.save();
@@ -180,6 +297,65 @@ app.post("/api/professional", upload.single("resume"), async (req, res) => {
     res.status(500).json({ message: "Server error. Please try again later." });
   }
 });
+
+// ===== GET PROFESSIONAL PROFILE =====
+app.get("/api/professional/profile", requireAuth, async (req, res) => {
+  try {
+    const professional = await Professional.findOne({ user: req.userId });
+
+    if (!professional) {
+      return res.status(404).json({ message: "Professional profile not found." });
+    }
+
+    res.json({ profile: professional });
+  } catch (err) {
+    console.log("GET PROFESSIONAL PROFILE ERROR:", err);
+    res.status(500).json({ message: "Server error. Please try again later." });
+  }
+});
+
+// ===== UPDATE PROFESSIONAL PROFILE =====
+app.put(
+  "/api/professional/profile",
+  requireAuth,
+  upload.single("profilePicture"),
+  async (req, res) => {
+    try {
+      const professional = await Professional.findOne({ user: req.userId });
+
+      if (!professional) {
+        return res.status(404).json({ message: "Professional profile not found." });
+      }
+
+      const data = buildProfileData(req.body, professionalFields);
+      const error = validateProfile(data, requiredProfessionalFields);
+
+      if (error) {
+        if (req.file) {
+          await deleteFromS3(req.file.key);
+        }
+
+        return res.status(400).json({ message: error });
+      }
+
+      if (req.file) {
+        data.profilePicture = req.file.location;
+      }
+
+      Object.assign(professional, data);
+
+      await professional.save();
+
+      res.json({
+        message: "Professional profile updated successfully.",
+        profile: professional,
+      });
+    } catch (err) {
+      console.log("UPDATE PROFESSIONAL PROFILE ERROR:", err);
+      res.status(500).json({ message: "Server error. Please try again later." });
+    }
+  }
+);
 
 app.listen(process.env.PORT, () => {
   console.log(`Server running on port ${process.env.PORT}`);
