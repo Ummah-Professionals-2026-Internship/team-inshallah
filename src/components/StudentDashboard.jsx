@@ -2,6 +2,7 @@
 import { useState } from "react";
 import Dashboard from "./Dashboard";
 import ViewProfessionals from "./ViewProfessionals"; // Imports your existing component
+import StudentProfile from "./StudentProfile";
 
 const STUDENT_NAV_LINKS = [
   { label: "Home" },
@@ -21,14 +22,16 @@ export default function StudentDashboard({ userName = "Maryam Khan" }) {
   const [view, setView] = useState("dashboard"); // 'dashboard' or 'professionals'
 
   const handleNavClick = (label) => {
-    console.log("Navigation link clicked:", label);
-    if (label === "View Professionals") {
-      setView("professionals");
-    } else if (label === "Home") {
-      setView("dashboard");
-    }
-  };
+  console.log("Navigation link clicked:", label);
 
+  if (label === "View Professionals") {
+    setView("professionals");
+  } else if (label === "Home") {
+    setView("dashboard");
+  } else if (label === "My Profile") {
+    setView("profile");
+  }
+};
   return (
     <Dashboard
       userName={userName}
@@ -39,9 +42,12 @@ export default function StudentDashboard({ userName = "Maryam Khan" }) {
       upcomingMeetings={UPCOMING_MEETINGS}
       previousMeetings={PREVIOUS_MEETINGS}
       onNavClick={handleNavClick}
-    >
+      onProfileClick={() => setView("profile")}
+     >
       {view === "professionals" ? (
-        <ViewProfessionals onClose={() => setView("dashboard")} category="business" />
+        <ViewProfessionals onClose={() => setView("dashboard")} category="business" />  
+      ) : view === "profile" ? (
+        <StudentProfile onClose={() => setView("dashboard")} />
       ) : null}
     </Dashboard>
   );

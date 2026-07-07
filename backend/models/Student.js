@@ -15,7 +15,7 @@ const studentSchema = new mongoose.Schema({
   aboutMe: { type: String, maxlength: 1000 },
   externalLinks: {
     linkedin: { type: String },
-    portfolio: { type: String },
+    website: { type: String },
     github: { type: String },
     other: { type: String },
   },
