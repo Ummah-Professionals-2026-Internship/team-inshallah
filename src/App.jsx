@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import LoginPage from "./components/LoginPage";
 import SignupPage from "./components/SignupPage";
-//import EmailVerification from "./components/EmailVerification";
+import EmailVerification from "./components/EmailVerification";
 import StudentForm from "./components/StudentForm";
 import ProfessionalForm from "./components/ProfessionalForm";
 import StudentDashboard from "./components/StudentDashboard";
@@ -13,7 +13,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<LoginPage />} />
         <Route path="/signup" element={<SignupPage />} />
-        {/* <Route path="/verify" element={<EmailVerification />} /> */}
+      <Route path="/verify" element={<EmailVerification />} />
         <Route path="/studentform" element={<StudentForm />} />
         <Route path="/professionalform" element={<ProfessionalForm />} />
         <Route path="/student-dashboard" element={<StudentDashboard />} />

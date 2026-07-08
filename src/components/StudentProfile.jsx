@@ -1,5 +1,9 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import "./StudentProfile.css";
+import profileSettingIcon from "../assets/Profile setting icon.svg";
+import settingsIcon from "../assets/Settings.svg";
+import logoutIcon from "../assets/Logout icon.svg";
 
 // Student profile edit screen — wired to the backend.
 //   GET  /api/student/profile  -> load current profile
@@ -16,6 +20,7 @@ const HEAR_ABOUT_OPTIONS = ["Word of Mouth", "Friend or family member", "My MSA"
 const REQUIRED = [
   ["name", "Name"],
   ["phone", "Phone Number"],
+  ["email", "Email"],
   ["gender", "Gender"],
   ["industry", "Industry"],
   ["major", "Major"],
@@ -25,7 +30,8 @@ const REQUIRED = [
 ];
 
 export default function StudentProfile({ onClose }) {
-  const [form, setForm] = useState({
+    const navigate = useNavigate();
+    const [form, setForm] = useState({
     name: "", email: "", region: "", phone: "", gender: "", industry: "",
     major: "", academicStanding: "", desiredCareer: "", currentJob: "",
     linkedin: "", website: "", github: "", other: "",
@@ -36,49 +42,75 @@ export default function StudentProfile({ onClose }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState(null); // { type: "success"|"error", msg: string }
+  const [originalEmail, setOriginalEmail] = useState("");
+  const [editingEmail, setEditingEmail] = useState(false);
 
   const update = (field, value) => setForm((prev) => ({ ...prev, [field]: value }));
 
   // ----- Load current profile on mount -----
-  useEffect(() => {
-    const token = localStorage.getItem("token");
-    fetch(`${API}/api/student/profile`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then(async (res) => {
-        if (res.status === 404) return null; // no profile yet
-        if (!res.ok) throw new Error("Failed to load profile");
-        const body = await res.json();
-        return body.profile;
-      })
-      .then((p) => {
-        if (p) {
-          const links = p.externalLinks || {};
-          setForm((prev) => ({
-            ...prev,
-            name: p.name || "",
-            phone: p.phone || "",
-            gender: p.gender || "",
-            industry: p.industry || "",
-            major: p.major || "",
-            academicStanding: p.academicStanding || "",
-            desiredCareer: p.desiredFutureCareer || "",
-            currentJob: p.currentJob || "",
-            aboutMe: p.aboutMe || "",
-            otherInformation: p.otherInformation || "",
-            hearAbout: p.hearAboutService || "",
-            linkedin: links.linkedin || "",
-            website: links.website || "",
-            github: links.github || "",
-            other: links.other || "",
-            existingPicture: p.profilePicture || "",
-          }));
-        }
-      })
-      .catch(() => setStatus({ type: "error", msg: "Could not load your profile." }))
-      .finally(() => setLoading(false));
-  }, []);
+useEffect(() => {
+  const token = localStorage.getItem("token");
 
+  let savedUser = {};
+  try {
+    savedUser = JSON.parse(localStorage.getItem("user") || "{}");
+  } catch {
+    savedUser = {};
+  }
+
+  console.log("TOKEN:", token);
+  console.log("SAVED USER:", savedUser);
+
+  fetch(`${API}/api/student/profile`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+    .then(async (res) => {
+      const body = await res.json().catch(() => ({}));
+
+      console.log("PROFILE STATUS:", res.status);
+      console.log("PROFILE BODY:", body);
+
+      if (res.status === 404) return null;
+      if (!res.ok) throw new Error(body.message || "Failed to load profile");
+
+      return body.profile || body.student || body.data || null;
+    })
+    .then((p) => {
+      console.log("PROFILE USED:", p);
+
+      const links = p?.externalLinks || {};
+      const loadedEmail = p?.user?.email || savedUser.email || "";
+
+      setOriginalEmail(loadedEmail);
+
+      setForm((prev) => ({
+        ...prev,
+        email: loadedEmail,
+        name: p?.name || "",
+        region: p?.region || "",
+        phone: p?.phone || "",
+        gender: p?.gender || "",
+        industry: p?.industry || "",
+        major: p?.major || "",
+        academicStanding: p?.academicStanding || "",
+        desiredCareer: p?.desiredFutureCareer || "",
+        currentJob: p?.currentJob || "",
+        aboutMe: p?.aboutMe || "",
+        otherInformation: p?.otherInformation || "",
+        hearAbout: p?.hearAboutService || "",
+        linkedin: links.linkedin || "",
+        website: links.website || "",
+        github: links.github || "",
+        other: links.other || "",
+        existingPicture: p?.profilePicture || "",
+      }));
+    })
+    .catch((err) => {
+      console.error("LOAD PROFILE ERROR:", err);
+      setStatus({ type: "error", msg: err.message || "Could not load your profile." });
+    })
+    .finally(() => setLoading(false));
+}, []);
   // ----- Save -----
   async function handleSave() {
     // client-side required check
@@ -153,13 +185,13 @@ export default function StudentProfile({ onClose }) {
           <button type="button" className="sp-back" onClick={onClose}>← Back</button>
           <nav className="sp-nav">
             <button type="button" className="sp-nav-item sp-nav-active">
-              <span className="sp-nav-icon" aria-hidden="true">◉</span> Profile
+              <span className="sp-nav-icon" aria-hidden="true"><img src={profileSettingIcon} alt="Profile" /></span> Profile
             </button>
             <button type="button" className="sp-nav-item">
-              <span className="sp-nav-icon" aria-hidden="true">⚙</span> Settings
+              <span className="sp-nav-icon" aria-hidden="true"><img src={settingsIcon} alt="Settings" /></span> Settings
             </button>
             <button type="button" className="sp-nav-item">
-              <span className="sp-nav-icon" aria-hidden="true">⏻</span> Logout
+              <span className="sp-nav-icon" aria-hidden="true"><img src={logoutIcon} alt="Logout" /></span> Logout
             </button>
           </nav>
         </aside>
@@ -261,11 +293,36 @@ export default function StudentProfile({ onClose }) {
             </div>
 
             <div className="sp-field">
-              <label>Email <span className="sp-req">*</span></label>
-              <div className="sp-email-row">
-                <input value={form.email} onChange={(e) => update("email", e.target.value)} />
-                <button type="button" className="sp-inline-btn">Edit</button>
-              </div>
+            <label>Email <span className="sp-req">*</span></label>
+
+            <div className="sp-email-row">
+                <input
+                value={form.email}
+                disabled={!editingEmail}
+                onChange={(e) => update("email", e.target.value)}
+                />
+
+                <button
+                type="button"
+                className="sp-inline-btn"
+                onClick={() => {
+                    if (editingEmail) {
+                    update("email", originalEmail);
+                    setEditingEmail(false);
+                    } else {
+                    setEditingEmail(true);
+                    }
+                }}
+                >
+                {editingEmail ? "Cancel" : "Edit"}
+                </button>
+            </div>
+
+            {editingEmail && (
+                <p className="sp-email-note">
+                Changing your email will require verification again.
+                </p>
+            )}
             </div>
 
             <div className="sp-field">
