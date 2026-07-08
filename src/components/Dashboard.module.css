@@ -9,7 +9,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 16px 32px;
-  background: #e9ebef;
+  background: #00212c;
 }
 
 .brand {
@@ -28,7 +28,7 @@
   margin: 4px 0 0;
   font-size: 1rem;
   font-weight: 500;
-  color: #0a7ea4;
+  color: #ffffff;
 }
 
 .userArea {
@@ -48,13 +48,13 @@
   margin: 0;
   font-size: 0.85rem;
   font-weight: 600;
-  color: #0a7ea4;
+  color: #ffffff;
 }
 
 .userMeta {
   margin: 2px 0 0;
   font-size: 0.78rem;
-  color: #0a7ea4;
+  color: #ffffff;
 }
 
 .avatar {
@@ -77,6 +77,11 @@
 }
 
 .burgerBtn {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  width: 32px;
+  height: 24px;
   background: transparent;
   border: none;
   cursor: pointer;
@@ -88,7 +93,7 @@
 .burgerBtn span {
   display: block;
   height: 4px;
-  background: #3982a6;
+  background: #ffffff;
   width: 100%;
   margin-bottom: 3px;
 }
@@ -101,7 +106,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: #0a7ea4;
+  background: #007ca6;
   padding: 14px 32px;
 }
 
@@ -123,7 +128,6 @@
   gap: 36px;
 }
 
-/* Updated selector button configuration */
 .navLinkButton {
   background: none;
   border: none;
@@ -151,7 +155,7 @@
   font-weight: 800;
   line-height: 1;
   letter-spacing: 0;
-  color: #0a7ea4;
+  color: #007ca6;
 }
 
 .grid {
@@ -262,8 +266,8 @@
   display: flex;
   align-items: center;
   gap: 16px;
-  background: #ffffff;
-  border: 1px solid #d8dadf;
+  background: #007ca6;
+  border: none;
   border-radius: 30px;
   padding: 14px 20px;
   cursor: pointer;
@@ -272,31 +276,41 @@
   font-size: 18px;
   font-weight: 500;
   line-height: 1.2;
-  color: #1a1a1a;
+  color: #ffffff;
   transition: background 0.15s ease;
 }
 
+.todoItem:nth-child(2) {
+  background: #fdbb37;
+  color: #1a1a1a;
+}
+
+.todoItem:nth-child(2) .todoCircle {
+  border: none;
+}
+
 .todoItem:hover {
-  background: #f7f9fb;
+  opacity: 0.9;
 }
 
 .todoCircle {
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  border: 1.5px solid #d8dadf;
+  border: 2px solid #ffffff;
+  background: #ffffff;
   flex-shrink: 0;
   transition: background 0.15s ease, border-color 0.15s ease;
 }
 
 .todoCircleChecked {
-  background: #0a7ea4;
-  border-color: #0a7ea4;
+  background: transparent;
+  border-color: #ffffff;
 }
 
 .todoTextChecked {
   text-decoration: line-through;
-  color: #8a8d94;
+  opacity: 0.75;
 }
 
 .emptyText {
