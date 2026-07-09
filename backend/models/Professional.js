@@ -10,12 +10,13 @@ const professionalSchema = new mongoose.Schema({
   industry: { type: String, required: true },
   volunteeringFor: { type: String, required: true },
   major: { type: String },
-  almaMater: { type: String},
+  almaMater: { type: String },
   mentorOpposingGender: { type: String, required: true },
   resume: { type: String, required: true },
   countyState: { type: String, required: true },
   hearAboutService: { type: String, required: true },
   otherInformation: { type: String },
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
 }, { timestamps: true });
 
 export default mongoose.model("Professional", professionalSchema);

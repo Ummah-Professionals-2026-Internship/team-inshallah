@@ -11,7 +11,8 @@ import Student from "./models/Student.js";
 import Professional from "./models/Professional.js";
 import authRoutes from "./routes/auth.js";
 import emailVerificationRoutes from "./routes/emailVerification.js";
-
+import { requireAuth } from "./middleware/auth.js";
+import User from "./models/User.js";
 
 dotenv.config();
 
@@ -120,7 +121,7 @@ const findMissing = (data, requiredFields) =>
   );
 
 // ===== STUDENT endpoint =====
-app.post("/api/student", upload.single("resume"), async (req, res) => {
+app.post("/api/student", requireAuth, upload.single("resume"), async (req, res) => {
   try {
     const data = buildData(req.body, studentFields);
     const missing = findMissing(data, requiredStudentFields);
@@ -130,7 +131,6 @@ app.post("/api/student", upload.single("resume"), async (req, res) => {
     }
 
     if (missing.length > 0) {
-      // delete the orphaned résumé from S3 if validation failed
       if (req.file) {
         await deleteFromS3(req.file.key);
       }
@@ -139,11 +139,14 @@ app.post("/api/student", upload.single("resume"), async (req, res) => {
       });
     }
 
-    // store the S3 file location (URL) in MongoDB
     data.resume = req.file.location;
+    data.userId = req.userId;
 
     const student = new Student(data);
     await student.save();
+
+    await User.findByIdAndUpdate(req.userId, { profileComplete: true });
+
     res.status(201).json({ message: "Student submission saved!", student });
   } catch (err) {
     console.log("ERROR:", err);
@@ -152,7 +155,7 @@ app.post("/api/student", upload.single("resume"), async (req, res) => {
 });
 
 // ===== PROFESSIONAL endpoint =====
-app.post("/api/professional", upload.single("resume"), async (req, res) => {
+app.post("/api/professional", requireAuth, upload.single("resume"), async (req, res) => {
   try {
     const data = buildData(req.body, professionalFields);
     const missing = findMissing(data, requiredProfessionalFields);
@@ -171,9 +174,13 @@ app.post("/api/professional", upload.single("resume"), async (req, res) => {
     }
 
     data.resume = req.file.location;
+    data.userId = req.userId;
 
     const professional = new Professional(data);
     await professional.save();
+
+    await User.findByIdAndUpdate(req.userId, { profileComplete: true });
+
     res.status(201).json({ message: "Professional submission saved!", professional });
   } catch (err) {
     console.log("ERROR:", err);
@@ -184,3 +191,6 @@ app.post("/api/professional", upload.single("resume"), async (req, res) => {
 app.listen(process.env.PORT, () => {
   console.log(`Server running on port ${process.env.PORT}`);
 });
+
+
+

@@ -7,6 +7,7 @@ const userSchema = new mongoose.Schema(
     role: { type: String, enum: ["student", "professional"], default: "student" },
     // flipped to true by the email-verification flow once the code is confirmed
     emailVerified: { type: Boolean, default: false },
+    profileComplete: { type: Boolean, default: false }
   },
   { timestamps: true }
 );
