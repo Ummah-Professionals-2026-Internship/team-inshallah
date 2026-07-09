@@ -44,6 +44,7 @@ export default function StudentProfile({ onClose }) {
   const [status, setStatus] = useState(null); // { type: "success"|"error", msg: string }
   const [originalEmail, setOriginalEmail] = useState("");
   const [editingEmail, setEditingEmail] = useState(false);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   const update = (field, value) => setForm((prev) => ({ ...prev, [field]: value }));
 
@@ -110,7 +111,7 @@ useEffect(() => {
       setStatus({ type: "error", msg: err.message || "Could not load your profile." });
     })
     .finally(() => setLoading(false));
-}, []);
+  }, []);
   // ----- Save -----
   async function handleSave() {
     // client-side required check
@@ -152,26 +153,48 @@ useEffect(() => {
       const body = await res.json();
       if (!res.ok) throw new Error(body.message || "Save failed");
       setStatus({ type: "success", msg: body.message || "Profile updated successfully." });
-      if (body.profile?.profilePicture) {
-        update("existingPicture", body.profile.profilePicture);
+      const updatedProfile = body.profile || body.student || body.data;
+
+      if (updatedProfile?.profilePicture) {
+          update("existingPicture", updatedProfile.profilePicture);
+          update("profilePicture", null);
       }
-    } catch (err) {
-      setStatus({ type: "error", msg: err.message || "Something went wrong." });
-    } finally {
-      setSaving(false);
+      } catch (err) {
+        setStatus({ type: "error", msg: err.message || "Something went wrong." });
+      } finally {
+        setSaving(false);
+      }
     }
-  }
+
+    const handleLogout = () => {
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
+      navigate("/");
+    };
+
+
+    const getImageUrl = (url) => {
+    if (!url) return "";
+
+    // S3/full URL or temporary local blob preview
+    if (url.startsWith("http") || url.startsWith("blob:")) {
+        return url;
+    }
+
+    // If backend returns something like /uploads/image.jpg
+    return `${API}${url.startsWith("/") ? "" : "/"}${url}`;
+    };
 
   // preview: newly-chosen file, else existing S3 url, else placeholder
   const previewSrc = form.profilePicture
-    ? URL.createObjectURL(form.profilePicture)
-    : form.existingPicture || "";
+  ? URL.createObjectURL(form.profilePicture)
+  : getImageUrl(form.existingPicture);
 
   if (loading) {
     return (
       <div className="sp-page">
         <div className="sp-modal">
-          <div className="sp-content"><p>Loading your profile…</p></div>
+        <div className="sp-content"><p>Loading your profile…</p></div>
         </div>
       </div>
     );
@@ -179,6 +202,29 @@ useEffect(() => {
 
   return (
     <div className="sp-page">
+      {showLogoutConfirm && (
+        <div className="sp-logout-overlay" onClick={() => setShowLogoutConfirm(false)}>
+          <div className="sp-logout-box" onClick={(e) => e.stopPropagation()}>
+            <p className="sp-logout-msg">Are you sure you want to log out?</p>
+            <div className="sp-logout-actions">
+              <button
+                type="button"
+                className="sp-logout-cancel"
+                onClick={() => setShowLogoutConfirm(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="sp-logout-confirm"
+                onClick={handleLogout}
+              >
+                Yes, log out
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="sp-modal">
         {/* ---------- Sidebar ---------- */}
         <aside className="sp-sidebar">
@@ -190,7 +236,7 @@ useEffect(() => {
             <button type="button" className="sp-nav-item">
               <span className="sp-nav-icon" aria-hidden="true"><img src={settingsIcon} alt="Settings" /></span> Settings
             </button>
-            <button type="button" className="sp-nav-item">
+            <button type="button" className="sp-nav-item" onClick={() => setShowLogoutConfirm(true)}>
               <span className="sp-nav-icon" aria-hidden="true"><img src={logoutIcon} alt="Logout" /></span> Logout
             </button>
           </nav>
@@ -216,7 +262,14 @@ useEffect(() => {
             <div className="sp-picture-block">
               <div className="sp-avatar">
                 {previewSrc ? (
-                  <img src={previewSrc} alt="Profile preview" />
+                  <img
+                    src={previewSrc}
+                    alt=""
+                    onError={() => {
+                        console.log("Broken profile image URL:", previewSrc);
+                        update("existingPicture", "");
+                    }}
+                    />
                 ) : (
                   <svg viewBox="0 0 100 100" fill="none" width="100%" height="100%" aria-hidden="true">
                     <circle cx="50" cy="50" r="50" fill="#b9bcc3" />
