@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import "./StudentProfile.css";
+import "./Profile.css";
 import profileSettingIcon from "../assets/Profile setting icon.svg";
 import settingsIcon from "../assets/Settings.svg";
 import logoutIcon from "../assets/Logout icon.svg";
