@@ -104,6 +104,7 @@ router.post('/verify', requireAuth, async (req, res) => {
       message: 'Email verified successfully',
       user: { id: user._id, email: user.email, role: user.role },
     }); }
+    
     catch (err) {
     console.error('Error verifying code:', err);
     return res.status(500).json({ error: 'Failed to verify code' });

@@ -87,7 +87,7 @@ export default function EmailVerification() {
     const handleContinue = async () => {
         const code = digits.join("");
         if (code.length < CODE_LENGTH) {
-            setError("Please enter the full code.");
+            setError("please enter the full code.");
             return;
         }
 
@@ -95,13 +95,13 @@ export default function EmailVerification() {
             const res = await authFetch("/verify", { code }); 
             const data = await res.json();
             if (!res.ok) {
-                setError(data.error ?? "Incorrect code. Please try again.");
+                setError(data.error ?? "incorrect code. please try again.");
                 return;
             }
             // verified - go to user form based on role returned by the backend
             navigate(data.user?.role === "student" ? "/student-form" : "/professional-form");
         } catch (err) {
-            setError("Something went wrong. Is the server running?");
+            setError("something went wrong. is the server running?");
         }
     };
 
