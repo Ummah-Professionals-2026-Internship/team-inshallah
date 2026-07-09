@@ -8,7 +8,7 @@ const professionalSchema = new mongoose.Schema({
   employer: { type: String, required: true },
   jobTitle: { type: String, required: true },
   industry: { type: String, required: true },
-  volunteeringFor: { type: String, required: true },
+  volunteeringFor: { type: [String], required: true },
   major: { type: String },
   almaMater: { type: String},
   mentorOpposingGender: { type: String, required: true },
