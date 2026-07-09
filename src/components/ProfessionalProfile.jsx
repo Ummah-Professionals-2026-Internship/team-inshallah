@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import "./StudentProfile.css";
+import { useNavigate } from "react-router-dom";
+import "./Profile.css";
 import profileSettingIcon from "../assets/Profile setting icon.svg";
 import settingsIcon from "../assets/Settings.svg";
 import logoutIcon from "../assets/Logout icon.svg";
@@ -52,6 +53,15 @@ const REQUIRED = [
 ];
 
 export default function ProfessionalProfile({ onClose }) {
+  const navigate = useNavigate();
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    navigate("/");
+  };
+
   const [form, setForm] = useState({
     name: "",
     email: "",
@@ -291,6 +301,21 @@ export default function ProfessionalProfile({ onClose }) {
 
   return (
     <div className="sp-page">
+      {showLogoutConfirm && (
+        <div className="sp-logout-overlay" onClick={() => setShowLogoutConfirm(false)}>
+          <div className="sp-logout-box" onClick={(e) => e.stopPropagation()}>
+            <p className="sp-logout-msg">Are you sure you want to log out?</p>
+            <div className="sp-logout-actions">
+              <button type="button" className="sp-logout-cancel" onClick={() => setShowLogoutConfirm(false)}>
+                Cancel
+              </button>
+              <button type="button" className="sp-logout-confirm" onClick={handleLogout}>
+                Yes, log out
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="sp-modal">
         <aside className="sp-sidebar">
           <button type="button" className="sp-back" onClick={onClose}>
@@ -312,7 +337,7 @@ export default function ProfessionalProfile({ onClose }) {
               Settings
             </button>
 
-            <button type="button" className="sp-nav-item">
+            <button type="button" className="sp-nav-item" onClick={() => setShowLogoutConfirm(true)}>
               <span className="sp-nav-icon">
                 <img src={logoutIcon} alt="Logout" />
               </span>
@@ -371,41 +396,52 @@ export default function ProfessionalProfile({ onClose }) {
                   />
                 </label>
               </div>
-            </div>
+          </div>
 
-            <div className="sp-links-block">
+          <div className="sp-links-block">
               <p className="sp-links-heading">External Links</p>
 
               <div className="sp-link-row">
-                <input
-                  placeholder="LinkedIn"
-                  value={form.linkedin}
-                  onChange={(e) => update("linkedin", e.target.value)}
-                />
+                <span className="sp-link-icon sp-link-icon-linkedin" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="currentColor" width="19" height="19">
+                    <path d="M20.45 20.45h-3.56v-5.57c0-1.33-.02-3.04-1.85-3.04-1.85 0-2.13 1.45-2.13 2.94v5.67H9.35V9h3.41v1.56h.05c.48-.9 1.64-1.85 3.37-1.85 3.6 0 4.27 2.37 4.27 5.46v6.28zM5.34 7.43a2.06 2.06 0 1 1 0-4.13 2.06 2.06 0 0 1 0 4.13zM7.12 20.45H3.56V9h3.56v11.45zM22.22 0H1.77C.79 0 0 .77 0 1.73v20.54C0 23.22.79 24 1.77 24h20.45c.98 0 1.78-.78 1.78-1.73V1.73C24 .77 23.2 0 22.22 0z" />
+                  </svg>
+                </span>
+                <input placeholder="LinkedIn" value={form.linkedin}
+                  onChange={(e) => update("linkedin", e.target.value)} />
               </div>
 
               <div className="sp-link-row">
-                <input
-                  placeholder="Website"
-                  value={form.website}
-                  onChange={(e) => update("website", e.target.value)}
-                />
+                <span className="sp-link-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="19" height="19">
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="2" y1="12" x2="22" y2="12" />
+                    <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                  </svg>
+                </span>
+                <input placeholder="Website" value={form.website}
+                  onChange={(e) => update("website", e.target.value)} />
               </div>
 
               <div className="sp-link-row">
-                <input
-                  placeholder="GitHub"
-                  value={form.github}
-                  onChange={(e) => update("github", e.target.value)}
-                />
+                <span className="sp-link-icon sp-link-icon-github" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="currentColor" width="19" height="19">
+                    <path d="M12 .5C5.37.5 0 5.87 0 12.5c0 5.3 3.44 9.8 8.21 11.39.6.11.82-.26.82-.58v-2.03c-3.34.73-4.04-1.61-4.04-1.61-.55-1.39-1.34-1.76-1.34-1.76-1.09-.75.08-.73.08-.73 1.21.09 1.84 1.24 1.84 1.24 1.07 1.84 2.81 1.31 3.5 1 .11-.78.42-1.31.76-1.61-2.67-.3-5.47-1.34-5.47-5.95 0-1.31.47-2.39 1.24-3.23-.13-.3-.54-1.52.12-3.18 0 0 1.01-.32 3.3 1.23a11.5 11.5 0 0 1 6 0c2.29-1.55 3.3-1.23 3.3-1.23.66 1.66.25 2.88.12 3.18.77.84 1.24 1.92 1.24 3.23 0 4.62-2.81 5.64-5.49 5.94.43.37.81 1.1.81 2.22v3.29c0 .32.22.7.83.58A12 12 0 0 0 24 12.5C24 5.87 18.63.5 12 .5z" />
+                  </svg>
+                </span>
+                <input placeholder="GitHub" value={form.github}
+                  onChange={(e) => update("github", e.target.value)} />
               </div>
 
               <div className="sp-link-row">
-                <input
-                  placeholder="Other link"
-                  value={form.other}
-                  onChange={(e) => update("other", e.target.value)}
-                />
+                <span className="sp-link-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width="18" height="18">
+                    <line x1="12" y1="5" x2="12" y2="19" />
+                    <line x1="5" y1="12" x2="19" y2="12" />
+                  </svg>
+                </span>
+                <input placeholder="Other link" value={form.other}
+                  onChange={(e) => update("other", e.target.value)} />
               </div>
             </div>
           </div>
