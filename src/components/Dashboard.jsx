@@ -1,7 +1,7 @@
-/// shared dashboard layout - used by both the professional and student dashboards
+// shared dashboard layout - used by both the professional and student dashboards
 import { useState } from "react";
 import styles from "./Dashboard.module.css";
-import logoFull from "../assets/Brand Kit/Logos/PNGs/horizontal blue.png";
+import logoFull from "../assets/Brand Kit/Logos/PNGs/horizontal white.png";
 import inboxIcon from "../assets/inbox chat button.png";
 
 export default function Dashboard({
