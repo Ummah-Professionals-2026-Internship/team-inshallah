@@ -1,5 +1,6 @@
 import { useState } from "react";
 import Dashboard from "./Dashboard";
+import ProfessionalProfile from "./ProfessionalProfile";
 
 const PROFESSIONAL_NAV_LINKS = [
   { label: "Home" },
@@ -36,6 +37,7 @@ export default function ProfessionalDashboard({ userName = "Ashar Faisal" }) {
       upcomingMeetings={UPCOMING_MEETINGS}
       previousMeetings={PREVIOUS_MEETINGS}
       onNavClick={handleNavClick}
+      onProfileClick={() => setActiveView("profile")}
     >
       {activeView === "availability" ? (
         <div style={{ padding: "24px" }}>
@@ -44,6 +46,8 @@ export default function ProfessionalDashboard({ userName = "Ashar Faisal" }) {
           </h1>
           <p>Coming soon — this page is still being built.</p>
         </div>
+      ) : activeView === "profile" ? (
+        <ProfessionalProfile onClose={() => setActiveView("home")} />
       ) : null}
     </Dashboard>
   );
