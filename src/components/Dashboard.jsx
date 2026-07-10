@@ -62,7 +62,10 @@ export default function Dashboard({
           <button
             type="button"
             className={styles.burgerBtn}
-            onClick={() => setMenuOpen((open) => !open)}
+            onClick={(e) => {
+              e.stopPropagation();
+              setMenuOpen((open) => !open);
+            }}
             aria-label="Toggle menu"
             aria-expanded={menuOpen}
           >
