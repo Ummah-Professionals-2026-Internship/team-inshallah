@@ -33,8 +33,14 @@ export default function SignupPage() {
                 alert(data.message);
                 return;
             }
+
+            // save token + user info — the verify screen needs the token
+            // even though the email isn't confirmed yet
+            localStorage.setItem("token", data.token);
+            localStorage.setItem("user", JSON.stringify(data.user));
+
             // go to email verification before letting them in
-            navigate("/verify", { state: { email } });
+            navigate("/verify-email", { state: { email } });
         } catch (err) {
             alert("something went wrong. is the server running?");
         }

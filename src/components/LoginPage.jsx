@@ -37,6 +37,13 @@ export default function LoginPage() {
             // save token + user info for later
             localStorage.setItem("token", data.token);
             localStorage.setItem("user", JSON.stringify(data.user));
+            
+            // send them to verification instead of the dashboard if not verified yet
+            if (!data.user.emailVerified) {
+                navigate("/verify-email", { state: { email: data.user.email } });
+                return;
+            }
+
             navigate(data.user.role === "student" ? "/student-dashboard" : "/professional-dashboard");
         } catch (err) {
             alert("something went wrong. is the server running?");

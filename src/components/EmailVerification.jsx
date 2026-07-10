@@ -12,6 +12,8 @@ import bgPhoto from "../assets/Brand Kit/careerprep-bg.jpg";
 const CODE_LENGTH = 5;
 const RESEND_COOLDOWN = 60; // seconds
 
+const API_BASE = "http://localhost:5050/api/email-verification";
+
 export default function EmailVerification() {
 
     const navigate = useNavigate();
@@ -34,6 +36,20 @@ export default function EmailVerification() {
         const timer = setTimeout(() => setCooldown((c) => c - 1), 1000);
         return () => clearTimeout(timer);
     }, [cooldown]);
+
+    // backend uses requireAuth + req.userId,
+    // so every call needs the JWT issued at signup/login
+    const authFetch = (path, body) => {
+        const token = localStorage.getItem("token"); 
+        return fetch(`${API_BASE}${path}`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify(body),
+        });
+    };
 
     // handle typing into a digit box
     const handleDigitChange = (i, val) => {
@@ -74,19 +90,16 @@ export default function EmailVerification() {
             setError("please enter the full code.");
             return;
         }
-        try {
-            const res = await fetch("http://localhost:5050/api/auth/verify-email", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ email, code }),
-            });
+
+       try {
+            const res = await authFetch("/verify", { code }); 
             const data = await res.json();
             if (!res.ok) {
-                setError(data.message ?? "incorrect code. please try again.");
+                setError(data.error ?? "incorrect code. please try again.");
                 return;
             }
-            // verified — go to dashboard
-            navigate(data.user.role === "student" ? "/student-dashboard" : "/professional-dashboard");
+            // verified - go to user form based on role returned by the backend
+            navigate(data.user?.role === "student" ? "/student-form" : "/professional-form");
         } catch (err) {
             setError("something went wrong. is the server running?");
         }
@@ -96,14 +109,10 @@ export default function EmailVerification() {
     const handleResend = async () => {
         if (cooldown > 0) return;
         try {
-            const res = await fetch("http://localhost:5000/api/auth/resend-verification", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ email }),
-            });
+            const res = await authFetch("/request", {}); // backend looks up the user's email itself
             const data = await res.json();
             if (!res.ok) {
-                setError(data.message ?? "couldn't resend. try again.");
+                setError(data.error ?? "couldn't resend. try again.");
                 return;
             }
             setCooldown(RESEND_COOLDOWN); // start the 60s cooldown
