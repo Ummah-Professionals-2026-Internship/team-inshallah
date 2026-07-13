@@ -4,8 +4,8 @@ import dotenv from "dotenv";
 import multer from "multer";
 import multerS3 from "multer-s3";
 import path from "path";
-import { S3Client, DeleteObjectCommand } from "@aws-sdk/client-s3";
-
+import { S3Client, DeleteObjectCommand, GetObjectCommand} from "@aws-sdk/client-s3";
+import {getSignedUrl} from "@aws-sdk/s3-request-presigner";
 import connectDB from "./config/db.js";
 import Student from "./models/Student.js";
 import Professional from "./models/Professional.js";
@@ -32,6 +32,37 @@ const s3 = new S3Client({
     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
   },
 });
+
+async function getSignedFileUrl(storedUrl) {
+  if (!storedUrl) return "";
+
+  // Extract the key (the path after the bucket domain)
+  const key = storedUrl.split(".amazonaws.com/")[1];
+  if (!key) return storedUrl;
+
+  const params = {
+    Bucket: process.env.AWS_BUCKET_NAME,
+    Key: key,
+  };
+
+  // Only PDFs can render in the browser; force inline for them.
+  // Word docs get their correct type so they download as .docx, not .zip.
+  const lowerKey = key.toLowerCase();
+  if (lowerKey.endsWith(".pdf")) {
+    params.ResponseContentDisposition = "inline";
+    params.ResponseContentType = "application/pdf";
+  } else if (lowerKey.endsWith(".docx")) {
+    params.ResponseContentDisposition = "attachment";
+    params.ResponseContentType =
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  } else if (lowerKey.endsWith(".doc")) {
+    params.ResponseContentDisposition = "attachment";
+    params.ResponseContentType = "application/msword";
+  }
+
+  const command = new GetObjectCommand(params);
+  return await getSignedUrl(s3, command, { expiresIn: 3600 });
+}
 
 const fileFilter = (req, file, cb) => {
   const resumeTypes = [".pdf", ".doc", ".docx"];
@@ -291,7 +322,11 @@ app.get("/api/student/profile", requireAuth, async (req, res) => {
       return res.status(404).json({ message: "Student profile not found." });
     }
 
-    res.json({ profile: student });
+    const profile = student.toObject();
+    profile.profilePicture = await getSignedFileUrl(profile.profilePicture);
+    profile.resume = await getSignedFileUrl(profile.resume);
+
+    res.json({ profile });
   } catch (err) {
     console.log("GET STUDENT PROFILE ERROR:", err);
     res.status(500).json({ message: "Server error. Please try again later." });
@@ -302,7 +337,10 @@ app.get("/api/student/profile", requireAuth, async (req, res) => {
 app.put(
   "/api/student/profile",
   requireAuth,
-  upload.single("profilePicture"),
+  upload.fields([
+    { name: "profilePicture", maxCount: 1 },
+    { name: "resume", maxCount: 1 },
+  ]),
   async (req, res) => {
     try {
       const student = await Student.findOne({ user: req.userId });
@@ -315,20 +353,28 @@ app.put(
       const error = validateProfile(data, requiredStudentFields);
 
       if (error) {
-        if (req.file) await deleteFromS3(req.file.key);
+        if (req.files?.profilePicture) await deleteFromS3(req.files.profilePicture[0].key);
+        if (req.files?.resume) await deleteFromS3(req.files.resume[0].key);
         return res.status(400).json({ message: error });
       }
 
-      if (req.file) {
-        data.profilePicture = req.file.location;
+      if (req.files?.profilePicture) {
+        data.profilePicture = req.files.profilePicture[0].location;
+      }
+      if (req.files?.resume) {
+        data.resume = req.files.resume[0].location;
       }
 
       Object.assign(student, data);
       await student.save();
 
+      const profile = student.toObject();
+      profile.profilePicture = await getSignedFileUrl(profile.profilePicture);
+      profile.resume = await getSignedFileUrl(profile.resume);
+
       res.json({
         message: "Student profile updated successfully.",
-        profile: student,
+        profile,
       });
     } catch (err) {
       console.log("UPDATE STUDENT PROFILE ERROR:", err);
@@ -386,7 +432,11 @@ app.get("/api/professional/profile", requireAuth, async (req, res) => {
       return res.status(404).json({ message: "Professional profile not found." });
     }
 
-    res.json({ profile: professional });
+    const profile = professional.toObject();
+    profile.profilePicture = await getSignedFileUrl(profile.profilePicture);
+    profile.resume = await getSignedFileUrl(profile.resume);
+
+    res.json({ profile });
   } catch (err) {
     console.log("GET PROFESSIONAL PROFILE ERROR:", err);
     res.status(500).json({ message: "Server error. Please try again later." });
@@ -440,10 +490,15 @@ app.put(
       Object.assign(professional, data);
       await professional.save();
 
+      const profile = professional.toObject();
+      profile.profilePicture = await getSignedFileUrl(profile.profilePicture);
+      profile.resume = await getSignedFileUrl(profile.resume);
+
       res.json({
         message: "Professional profile updated successfully.",
-        profile: professional,
+        profile,
       });
+
     } catch (err) {
       console.log("UPDATE PROFESSIONAL PROFILE ERROR:", err);
       res.status(500).json({ message: "Server error. Please try again later." });
