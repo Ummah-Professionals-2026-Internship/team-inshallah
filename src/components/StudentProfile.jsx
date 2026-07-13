@@ -38,6 +38,7 @@ export default function StudentProfile({ onClose }) {
     aboutMe: "", otherInformation: "",
     resume: null, profilePicture: null,
     existingPicture: "", hearAbout: "",
+    existingResume: "",
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -104,6 +105,7 @@ useEffect(() => {
         github: links.github || "",
         other: links.other || "",
         existingPicture: p?.profilePicture || "",
+        existingResume: p?.resume || "",
       }));
     })
     .catch((err) => {
@@ -144,6 +146,7 @@ useEffect(() => {
       fd.append("github", form.github);
       fd.append("other", form.other);
       if (form.profilePicture) fd.append("profilePicture", form.profilePicture);
+      if (form.resume) fd.append("resume", form.resume);
 
       const res = await fetch(`${API}/api/student/profile`, {
         method: "PUT",
@@ -159,6 +162,12 @@ useEffect(() => {
           update("existingPicture", updatedProfile.profilePicture);
           update("profilePicture", null);
       }
+
+      if (updatedProfile?.resume) {
+        update("existingResume", updatedProfile.resume);
+        update("resume", null);
+      }
+
       } catch (err) {
         setStatus({ type: "error", msg: err.message || "Something went wrong." });
       } finally {
@@ -451,6 +460,15 @@ useEffect(() => {
               <label>Résumé</label>
               <input type="file" accept=".pdf,.doc,.docx"
                 onChange={(e) => update("resume", e.target.files[0])} />
+
+                {form.resume && <p>{form.resume.name}</p>}
+                {!form.resume && form.existingResume && (
+                  <p>
+                    <a href={form.existingResume} target="_blank" rel="noreferrer" className="sp-resume-link">
+                      View current résumé
+                    </a>
+                  </p>
+                )}
             </div>
             <div className="sp-field">
               <label>How did you hear about this service?</label>

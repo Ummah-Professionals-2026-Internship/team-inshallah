@@ -516,3 +516,14 @@
   background: #007CA6;
   color: #fff;
 }
+
+
+.sp-resume-link {
+  color: #007CA6;
+  font-weight: 600;
+  text-decoration: underline;
+}
+
+.sp-resume-link:hover {
+  color: #00212C;
+}

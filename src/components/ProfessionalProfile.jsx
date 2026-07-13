@@ -662,10 +662,16 @@ export default function ProfessionalProfile({ onClose }) {
                 accept=".pdf,.doc,.docx"
                 onChange={(e) => update("resume", e.target.files[0])}
               />
-
+              
               {form.resume && <p>{form.resume.name}</p>}
-              {!form.resume && form.existingResume && <p>Current résumé uploaded</p>}
-            </div>
+               {!form.resume && form.existingResume && (  
+                <p>
+                  <a href={form.existingResume} target="_blank" rel="noreferrer" className="sp-resume-link">
+                    View current résumé
+                  </a>
+                </p>
+              )}
+              </div>
 
             <div className="sp-field">
               <label>

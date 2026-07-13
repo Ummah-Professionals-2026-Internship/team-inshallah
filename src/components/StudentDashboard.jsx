@@ -1,5 +1,5 @@
 // dashboard shown to students - wraps the shared Dashboard with their nav links + filler data
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Dashboard from "./Dashboard";
 import ViewProfessionals from "./ViewProfessionals"; // Imports your existing component
 import StudentProfile from "./StudentProfile";
@@ -20,7 +20,27 @@ const PREVIOUS_MEETINGS = [];
 
 export default function StudentDashboard({ userName = "Maryam Khan" }) {
   const [view, setView] = useState("dashboard"); // 'dashboard' or 'professionals'
+  const [profilePhoto, setProfilePhoto] = useState("");
+  const [displayName, setDisplayName] = useState(userName);
 
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+
+    fetch("http://localhost:5050/api/student/profile", {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((body) => {
+        if (body?.profile?.profilePicture) {
+          setProfilePhoto(body.profile.profilePicture);
+        }
+        if (body?.profile?.name) {
+          setDisplayName(body.profile.name);
+        }
+      })
+      .catch(() => {});
+  }, []);
   const handleNavClick = (label) => {
   console.log("Navigation link clicked:", label);
 
@@ -34,9 +54,9 @@ export default function StudentDashboard({ userName = "Maryam Khan" }) {
 };
   return (
     <Dashboard
-      userName={userName}
+      userName={displayName}
       userRole="Student"
-      profilePhoto=""
+      profilePhoto={profilePhoto}
       navLinks={STUDENT_NAV_LINKS}
       todoItems={STUDENT_TODO}
       upcomingMeetings={UPCOMING_MEETINGS}
