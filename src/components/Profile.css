@@ -527,3 +527,36 @@
 .sp-resume-link:hover {
   color: #00212C;
 }
+
+/* Professional Tile Styles*/
+.tile-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 33, 44, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.tile-wrap {
+  position: relative;
+  width: 480px;        /* wants to be 480px... */
+  max-width: 92vw;     /* ...but never more than 92% of the screen */
+}
+
+.tile-close {
+  position: absolute;
+  top: -14px;
+  right: -14px;
+  border: none;
+  background: #fff;
+  border-radius: 50%;
+  width: 30px;
+  height: 30px;
+  font-size: 18px;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+  color: #00212C;
+  z-index: 1;
+}

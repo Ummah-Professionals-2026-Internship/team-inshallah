@@ -4,6 +4,7 @@ import "./Profile.css";
 import profileSettingIcon from "../assets/Profile setting icon.svg";
 import settingsIcon from "../assets/Settings.svg";
 import logoutIcon from "../assets/Logout icon.svg";
+import MentorCard from "./MentorCard";
 
 const API = "http://localhost:5050";
 
@@ -98,6 +99,7 @@ export default function ProfessionalProfile({ onClose }) {
   const [status, setStatus] = useState(null);
   const [originalEmail, setOriginalEmail] = useState("");
   const [editingEmail, setEditingEmail] = useState(false);
+  const [showTile, setShowTile] = useState(false);
 
   const update = (field, value) => {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -316,6 +318,22 @@ export default function ProfessionalProfile({ onClose }) {
           </div>
         </div>
       )}
+      {showTile && (
+        <div className="tile-overlay" onClick={() => setShowTile(false)}>
+          <div className="tile-wrap" onClick={(e) => e.stopPropagation()}>
+            <button type="button" className="tile-close" onClick={() => setShowTile(false)}>×</button>
+            <MentorCard
+              name={form.name}
+              jobTitle={form.jobTitle}
+              summary={form.aboutMe}
+              photo={form.existingPicture}
+              linkedin={form.linkedin}
+              website={form.website}
+              github={form.github}
+            />
+          </div>
+        </div>
+      )}
       <div className="sp-modal">
         <aside className="sp-sidebar">
           <button type="button" className="sp-back" onClick={onClose}>
@@ -397,6 +415,10 @@ export default function ProfessionalProfile({ onClose }) {
                 </label>
               </div>
           </div>
+
+          <button type="button" className="sp-tile-btn" onClick={() => setShowTile(true)}>
+            View Professional Tile
+          </button>
 
           <div className="sp-links-block">
               <p className="sp-links-heading">External Links</p>
