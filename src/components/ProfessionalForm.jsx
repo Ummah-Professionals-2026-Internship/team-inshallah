@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import './forms.css';
 import logo from "../assets/Brand Kit/Logos/PNGs/horizontal blue.png";
 import bg from "../assets/Brand Kit/careerprep-bg.png";
@@ -28,6 +29,7 @@ export default function ProfessionalForm() {
     
     const [errors, setErrors] = useState({});
     const [status, setStatus] = useState(null);
+    const navigate = useNavigate();
 
   function handleChange(e) {
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -106,13 +108,17 @@ export default function ProfessionalForm() {
         fd.append('otherInformation', form.otherInformation);
         fd.append('resume', form.resume);
 
+        const token = localStorage.getItem('token');
         const res = await fetch('/api/professional', {
         method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
         body: fd,
         });
 
         if (!res.ok) throw new Error('Submission failed.');
         setStatus('success');
+        setTimeout(() => navigate('/professional-dashboard'), 1000);
+        navigate('/professional-dashboard');
     } catch (err) {
         setStatus('error');
     }
