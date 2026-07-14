@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import '../forms.css';
 import logo from '../assets/Brand Kit/Logos/PNGs/horizontal blue.png';
 import bg from '../assets/Brand Kit/careerprep-bg.png';
@@ -6,6 +7,7 @@ import bg from '../assets/Brand Kit/careerprep-bg.png';
 const REGIONS = ['+1', '+44', '+92', '+971', '+966', '+20', '+234'];
 
 export default function StudentForm() {
+  const navigate = useNavigate();
   const [form, setForm] = useState({
     name: '',
     phoneRegion: '+1',
@@ -97,6 +99,10 @@ export default function StudentForm() {
       if (!res.ok) throw new Error('Submission failed.');
 
       setStatus('success');
+      if (!res.ok) throw new Error('Submission failed.');
+
+      setStatus('success');
+      navigate('/student-dashboard');
     } catch (err) {
       setStatus('error');
     }
