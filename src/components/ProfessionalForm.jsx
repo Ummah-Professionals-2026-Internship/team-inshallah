@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import './forms.css';
-import logo from './assets/Brand Kit/Logos/PNGs/horizontal blue.png';
-import bg from './assets/Brand Kit/careerprep-bg.png';
+import '../forms.css';
+import logo from '../assets/Brand Kit/Logos/PNGs/horizontal blue.png';
+import bg from '../assets/Brand Kit/careerprep-bg.png';
 
 const REGIONS = ['+1', '+44', '+92', '+971', '+966', '+20', '+234'];
 
