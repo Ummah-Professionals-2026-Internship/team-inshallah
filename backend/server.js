@@ -12,7 +12,8 @@ import Professional from "./models/Professional.js";
 import Meeting from "./models/Meeting.js";
 import authRoutes from "./routes/auth.js";
 import emailVerificationRoutes from "./routes/emailVerification.js";
-
+import { requireAuth } from "./middleware/auth.js";
+import User from "./models/User.js";
 
 dotenv.config();
 
@@ -130,7 +131,7 @@ const findMissing = (data, requiredFields) =>
   );
 
 // ===== STUDENT endpoint =====
-app.post("/api/student", upload.single("resume"), async (req, res) => {
+app.post("/api/student", requireAuth, upload.single("resume"), async (req, res) => {
   try {
     const data = buildData(req.body, studentFields);
     const missing = findMissing(data, requiredStudentFields);
@@ -149,9 +150,13 @@ app.post("/api/student", upload.single("resume"), async (req, res) => {
     }
 
     data.resume = req.file.location;
+    data.userId = req.userId;
 
     const student = new Student(data);
     await student.save();
+
+    await User.findByIdAndUpdate(req.userId, { profileComplete: true });
+
     res.status(201).json({ message: "Student submission saved!", student });
   } catch (err) {
     console.log("ERROR:", err);
@@ -159,8 +164,8 @@ app.post("/api/student", upload.single("resume"), async (req, res) => {
   }
 });
 
-// ===== PROFESSIONAL endpoint (create) =====
-app.post("/api/professional", upload.single("resume"), async (req, res) => {
+// ===== PROFESSIONAL endpoint =====
+app.post("/api/professional", requireAuth, upload.single("resume"), async (req, res) => {
   try {
     const data = buildData(req.body, professionalFields);
     const missing = findMissing(data, requiredProfessionalFields);
@@ -179,9 +184,13 @@ app.post("/api/professional", upload.single("resume"), async (req, res) => {
     }
 
     data.resume = req.file.location;
+    data.userId = req.userId;
 
     const professional = new Professional(data);
     await professional.save();
+
+    await User.findByIdAndUpdate(req.userId, { profileComplete: true });
+
     res.status(201).json({ message: "Professional submission saved!", professional });
   } catch (err) {
     console.log("ERROR:", err);
@@ -315,3 +324,6 @@ app.patch("/api/professional/:id", async (req, res) => {
 app.listen(process.env.PORT, () => {
   console.log(`Server running on port ${process.env.PORT}`);
 });
+
+
+

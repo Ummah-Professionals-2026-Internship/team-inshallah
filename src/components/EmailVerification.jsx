@@ -30,6 +30,9 @@ export default function EmailVerification() {
     // refs so we can focus the next box automatically
     const inputRefs = useRef([]);
 
+    // protects against firing this twice in dev
+    const hasSentInitialEmail = useRef(false);
+
     // tick the resend cooldown down every second
     useEffect(() => {
         if (cooldown <= 0) return;
@@ -37,10 +40,30 @@ export default function EmailVerification() {
         return () => clearTimeout(timer);
     }, [cooldown]);
 
+    // send the verification email automatically when the screen loads
+    useEffect(() => {
+        if (hasSentInitialEmail.current) return;
+        hasSentInitialEmail.current = true;
+
+        (async () => {
+            try {
+                const res = await authFetch("/request", {});
+                const data = await res.json();
+                if (!res.ok) {
+                    setError(data.error ?? "couldn't send verification email.");
+                    return;
+                }
+                setCooldown(RESEND_COOLDOWN);
+            } catch (err) {
+                setError("something went wrong. is the server running?");
+            }
+        })();
+    }, []);
+
     // backend uses requireAuth + req.userId,
     // so every call needs the JWT issued at signup/login
     const authFetch = (path, body) => {
-        const token = localStorage.getItem("token"); 
+        const token = localStorage.getItem("token");
         return fetch(`${API_BASE}${path}`, {
             method: "POST",
             headers: {
@@ -91,8 +114,8 @@ export default function EmailVerification() {
             return;
         }
 
-       try {
-            const res = await authFetch("/verify", { code }); 
+        try {
+            const res = await authFetch("/verify", { code });
             const data = await res.json();
             if (!res.ok) {
                 setError(data.error ?? "incorrect code. please try again.");
