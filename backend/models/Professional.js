@@ -25,6 +25,12 @@ const professionalSchema = new mongoose.Schema({
   countyState: { type: String, required: true },
   hearAboutService: { type: String, required: true },
   otherInformation: { type: String },
+  summary: { type: String, default: "" },
+  photo: { type: String, default: "" },
+  linkedin: { type: String, default: "" },
+  website: { type: String, default: "" },
+  github: { type: String, default: "" },
+  services: { type: [String], default: [] },
   userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
 }, { timestamps: true });
 

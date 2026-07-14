@@ -98,6 +98,24 @@
   color: #1a1a1a;
 }
 
+.moreBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: 1.5px solid #1a1a1a;
+  border-radius: 4px;
+  color: #1a1a1a;
+  cursor: pointer;
+  padding: 2px;
+  transition: opacity 0.15s ease, transform 0.1s ease;
+}
+
+.moreBtn:hover {
+  opacity: 0.7;
+  transform: scale(1.1);
+}
+
 @media (max-width: 520px) {
   .card {
     flex-direction: column;
