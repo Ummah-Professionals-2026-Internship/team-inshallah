@@ -9,6 +9,7 @@ import { S3Client, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import connectDB from "./config/db.js";
 import Student from "./models/Student.js";
 import Professional from "./models/Professional.js";
+import Meeting from "./models/Meeting.js";
 import authRoutes from "./routes/auth.js";
 
 dotenv.config();
@@ -91,6 +92,7 @@ const professionalFields = [
   "jobTitle", "industry", "volunteeringFor", "major",
   "almaMater", "mentorOpposingGender", "countyState",
   "hearAboutService", "otherInformation",
+  "summary", "photo", "linkedin", "website", "github", "services",
 ];
 const requiredProfessionalFields = [
   "name", "phone", "gender", "experienceLevel", "employer",
@@ -102,7 +104,15 @@ const buildData = (body, allowedFields) => {
   const data = {};
   for (const field of allowedFields) {
     if (body[field] !== undefined) {
-      data[field] = clean(body[field]);
+      if (field === "volunteeringFor" || field === "services") {
+        try {
+          data[field] = JSON.parse(body[field]);
+        } catch {
+          data[field] = body[field];
+        }
+      } else {
+        data[field] = clean(body[field]);
+      }
     }
   }
   return data;
@@ -126,7 +136,6 @@ app.post("/api/student", upload.single("resume"), async (req, res) => {
     }
 
     if (missing.length > 0) {
-      // delete the orphaned résumé from S3 if validation failed
       if (req.file) {
         await deleteFromS3(req.file.key);
       }
@@ -135,7 +144,6 @@ app.post("/api/student", upload.single("resume"), async (req, res) => {
       });
     }
 
-    // store the S3 file location (URL) in MongoDB
     data.resume = req.file.location;
 
     const student = new Student(data);
@@ -147,7 +155,7 @@ app.post("/api/student", upload.single("resume"), async (req, res) => {
   }
 });
 
-// ===== PROFESSIONAL endpoint =====
+// ===== PROFESSIONAL endpoint (create) =====
 app.post("/api/professional", upload.single("resume"), async (req, res) => {
   try {
     const data = buildData(req.body, professionalFields);
@@ -171,6 +179,129 @@ app.post("/api/professional", upload.single("resume"), async (req, res) => {
     const professional = new Professional(data);
     await professional.save();
     res.status(201).json({ message: "Professional submission saved!", professional });
+  } catch (err) {
+    console.log("ERROR:", err);
+    res.status(500).json({ message: "Server error. Please try again later." });
+  }
+});
+
+// ===== GET /api/professionals — paginated list with filters + visibility rules =====
+app.get("/api/professionals", async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 12;
+    const { industry, services } = req.query;
+
+    const filter = {};
+    if (industry) {
+      filter.industry = industry;
+    }
+    if (services) {
+      const serviceList = services.split(",").map((s) => s.trim());
+      filter.services = { $in: serviceList };
+    }
+
+    const allMatching = await Professional.find(filter).sort({ createdAt: -1 });
+
+    const now = new Date();
+    const visibleProfessionals = [];
+
+    for (const professional of allMatching) {
+      const oneWeekAgo = new Date(now - 7 * 24 * 60 * 60 * 1000);
+      const oneMonthAgo = new Date(now - 30 * 24 * 60 * 60 * 1000);
+
+      const meetingsLastWeek = await Meeting.countDocuments({
+        professional: professional._id,
+        status: { $in: ["scheduled", "completed"] },
+        date: { $gte: oneWeekAgo },
+      });
+
+      const meetingsLastMonth = await Meeting.countDocuments({
+        professional: professional._id,
+        status: { $in: ["scheduled", "completed"] },
+        date: { $gte: oneMonthAgo },
+      });
+
+      const mostRecentMeeting = await Meeting.findOne({
+        professional: professional._id,
+        status: { $in: ["scheduled", "completed"] },
+      }).sort({ date: -1 });
+
+      let isHidden = false;
+
+      if (mostRecentMeeting) {
+        const daysSinceLastMeeting = (now - mostRecentMeeting.date) / (24 * 60 * 60 * 1000);
+
+        if (meetingsLastMonth >= 2 && daysSinceLastMeeting < 21) {
+          isHidden = true;
+        } else if (meetingsLastWeek >= 1 && daysSinceLastMeeting < 7) {
+          isHidden = true;
+        }
+      }
+
+      if (!isHidden) {
+        visibleProfessionals.push(professional);
+      }
+    }
+
+    const startIndex = (page - 1) * limit;
+    const paginatedResults = visibleProfessionals.slice(startIndex, startIndex + limit);
+
+    const cardData = paginatedResults.map((p) => ({
+      id: p._id,
+      name: p.name,
+      jobTitle: p.jobTitle,
+      summary: p.summary,
+      photo: p.photo,
+      linkedin: p.linkedin,
+      website: p.website,
+      github: p.github,
+      industry: p.industry,
+      services: p.services,
+    }));
+
+    res.json({
+      professionals: cardData,
+      currentPage: page,
+      totalPages: Math.ceil(visibleProfessionals.length / limit),
+      totalResults: visibleProfessionals.length,
+    });
+  } catch (err) {
+    console.log("ERROR:", err);
+    res.status(500).json({ message: "Server error. Please try again later." });
+  }
+});
+
+// ===== DELETE /api/professional/:id — remove a professional by ID (for cleanup/testing) =====
+app.delete("/api/professional/:id", async (req, res) => {
+  try {
+    const deleted = await Professional.findByIdAndDelete(req.params.id);
+    if (!deleted) {
+      return res.status(404).json({ message: "Professional not found." });
+    }
+    res.json({ message: "Professional deleted.", deleted });
+  } catch (err) {
+    console.log("ERROR:", err);
+    res.status(500).json({ message: "Server error. Please try again later." });
+  }
+});
+
+// ===== PATCH /api/professional/:id — update specific fields (e.g. add services, photo, links) =====
+app.patch("/api/professional/:id", async (req, res) => {
+  try {
+    const allowedUpdates = ["name","summary", "photo", "linkedin", "website", "github", "services"];
+    const updates = {};
+    for (const field of allowedUpdates) {
+      if (req.body[field] !== undefined) {
+        updates[field] = req.body[field];
+      }
+    }
+
+    const updated = await Professional.findByIdAndUpdate(req.params.id, updates, { new: true });
+    if (!updated) {
+      return res.status(404).json({ message: "Professional not found." });
+    }
+    res.json({ message: "Professional updated.", professional: updated });
   } catch (err) {
     console.log("ERROR:", err);
     res.status(500).json({ message: "Server error. Please try again later." });

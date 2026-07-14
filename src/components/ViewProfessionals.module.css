@@ -45,19 +45,81 @@
   outline-offset: 2px;
 }
 
-.subheading {
+.filterRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
   margin: 32px 0 28px;
-  text-align: left;
+}
+
+.filterPillWrap {
+  position: relative;
+  flex: 0 0 auto;
+  width: 30%;
+}
+
+.filterPill {
+  width: 100%;
+  padding: 8px 32px 8px 12px;
+  border: 1.5px solid #8acbdb;
+  border-radius: 8px;
   font-family: "Montserrat", system-ui, sans-serif;
-  font-size: 1.5rem;
+  font-size: 16px;
   font-weight: 400;
+  color: #000000;
+  background: #ffffff;
+  cursor: pointer;
+  appearance: none;
+  box-sizing: border-box;
+}
+
+.chevronIcon {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%) scale(0.7);
+  pointer-events: none;
+}
+
+.searchIconBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+.searchInput {
+  width: 70%;
+  margin-top: -20px;
+  margin-bottom: 20px;
+  padding: 6px 12px;
+  border: 1.5px solid #8acbdb;
+  border-radius: 8px;
+  font-family: "Montserrat", system-ui, sans-serif;
+  font-size: 0.9rem;
+  background: #ffffff;
   color: #1a1a1a;
+  box-sizing: border-box;
 }
 
 .grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 56px 48px;
+}
+
+.emptyText {
+  margin: 20px 0;
+  font-family: "Montserrat", system-ui, sans-serif;
+  font-size: 0.95rem;
+  color: #8a8d94;
+  font-style: italic;
 }
 
 .pagination {
@@ -122,7 +184,11 @@
   .title {
     font-size: 1.7rem;
   }
-  .subheading {
-    font-size: 1.25rem;
+  .filterRow {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .filterPillWrap {
+    width: 100%;
   }
 }
