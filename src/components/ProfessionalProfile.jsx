@@ -413,12 +413,14 @@ export default function ProfessionalProfile({ onClose }) {
                     onChange={(e) => update("profilePicture", e.target.files[0])}
                   />
                 </label>
+
+                 <button type="button" className="sp-tile-btn" onClick={() => setShowTile(true)}>
+                    View Tile
+                 </button>
               </div>
           </div>
 
-          <button type="button" className="sp-tile-btn" onClick={() => setShowTile(true)}>
-            View Professional Tile
-          </button>
+        
 
           <div className="sp-links-block">
               <p className="sp-links-heading">External Links</p>
