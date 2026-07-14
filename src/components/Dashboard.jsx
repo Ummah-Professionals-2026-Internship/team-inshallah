@@ -13,6 +13,7 @@ export default function Dashboard({
   upcomingMeetings,
   previousMeetings,
   onNavClick,
+  onProfileClick,
   children,
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -32,7 +33,17 @@ export default function Dashboard({
           </div>
         </div>
 
-        <div className={styles.userArea}>
+        <div
+  className={styles.userArea}
+  onClick={onProfileClick}
+  role="button"
+  tabIndex={0}
+  onKeyDown={(e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      onProfileClick?.();
+    }
+  }}
+>
           <div className={styles.userText}>
             <p className={styles.userName}>{userName}</p>
             <p className={styles.userMeta}>{userRole}</p>
@@ -51,7 +62,10 @@ export default function Dashboard({
           <button
             type="button"
             className={styles.burgerBtn}
-            onClick={() => setMenuOpen((open) => !open)}
+            onClick={(e) => {
+              e.stopPropagation();
+              setMenuOpen((open) => !open);
+            }}
             aria-label="Toggle menu"
             aria-expanded={menuOpen}
           >
