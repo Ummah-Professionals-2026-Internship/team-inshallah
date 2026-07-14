@@ -24,7 +24,7 @@ const createToken = (user) =>
   jwt.sign(
     { sub: user._id.toString(), role: user.role },
     process.env.JWT_SECRET,
-    { expiresIn: "7d" }
+    { expiresIn: "60d" }
   );
 
 const isValidEmail = (email) =>
