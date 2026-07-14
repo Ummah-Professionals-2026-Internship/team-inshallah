@@ -12,6 +12,7 @@ import Professional from "./models/Professional.js";
 import authRoutes from "./routes/auth.js";
 import emailVerificationRoutes from "./routes/emailVerification.js";
 import { requireAuth } from "./middleware/auth.js";
+import User from "./models/User.js";
 
 dotenv.config();
 
@@ -287,8 +288,9 @@ app.post("/api/student", requireAuth, upload.single("resume"), async (req, res) 
     }
 
     if (missing.length > 0) {
-      if (req.file) await deleteFromS3(req.file.key);
-
+      if (req.file) {
+        await deleteFromS3(req.file.key);
+      }
       return res.status(400).json({
         message: `Missing required fields: ${missing.join(", ")}`,
       });
@@ -296,14 +298,14 @@ app.post("/api/student", requireAuth, upload.single("resume"), async (req, res) 
 
     data.resume = req.file.location;
     data.user = req.userId;
+    data.userId = req.userId;
 
     const student = new Student(data);
     await student.save();
 
-    res.status(201).json({
-      message: "Student submission saved!",
-      student,
-    });
+    await User.findByIdAndUpdate(req.userId, { profileComplete: true });
+
+    res.status(201).json({ message: "Student submission saved!", student });
   } catch (err) {
     console.log("STUDENT POST ERROR:", err);
     res.status(500).json({ message: "Server error. Please try again later." });
@@ -437,6 +439,9 @@ app.get("/api/professional/profile", requireAuth, async (req, res) => {
     profile.resume = await getSignedFileUrl(profile.resume);
 
     res.json({ profile });
+    await User.findByIdAndUpdate(req.userId, { profileComplete: true });
+
+    res.status(201).json({ message: "Professional submission saved!", professional });
   } catch (err) {
     console.log("GET PROFESSIONAL PROFILE ERROR:", err);
     res.status(500).json({ message: "Server error. Please try again later." });
@@ -509,3 +514,6 @@ app.put(
 app.listen(process.env.PORT, () => {
   console.log(`Server running on port ${process.env.PORT}`);
 });
+
+
+

@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import './forms.css';
-import logo from "../assets/Brand Kit/Logos/PNGs/horizontal blue.png";
-import bg from "../assets/Brand Kit/careerprep-bg.png";
+import '../forms.css';
+import logo from '../assets/Brand Kit/Logos/PNGs/horizontal blue.png';
+import bg from '../assets/Brand Kit/careerprep-bg.png';
 
 const REGIONS = ['+1', '+44', '+92', '+971', '+966', '+20', '+234'];
 
 export default function ProfessionalForm() {
+    const navigate = useNavigate();
     const [form, setForm] = useState({
         name: '',
         phoneRegion: '+1',

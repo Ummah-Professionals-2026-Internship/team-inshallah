@@ -7,6 +7,7 @@ import bg from "../assets/Brand Kit/careerprep-bg.png";
 const REGIONS = ['+1', '+44', '+92', '+971', '+966', '+20', '+234'];
 
 export default function StudentForm() {
+  const navigate = useNavigate();
   const [form, setForm] = useState({
     name: '',
     phoneRegion: '+1',
@@ -94,13 +95,18 @@ export default function StudentForm() {
       fd.append('otherInformation', form.otherInfoText);
       fd.append('resume', form.resume);
 
-      const token = localStorage.getItem('token');
       const res = await fetch('/api/student', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('token')}`,
+        },
         body: fd,
       });
 
+
+      if (!res.ok) throw new Error('Submission failed.');
+
+      setStatus('success');
       if (!res.ok) throw new Error('Submission failed.');
 
       setStatus('success');
@@ -111,7 +117,7 @@ export default function StudentForm() {
   }
 
   return (
-     <div className="page-background" style={{ backgroundImage: `url(${bg})` }}>
+    <div className="page-background" style={{ backgroundImage: `url(${bg})` }}>
       <div className="form-container">
         <form onSubmit={handleSubmit}>
 
@@ -198,23 +204,23 @@ export default function StudentForm() {
 
           {/* Resume */}
           <label>Résumé <span className="required">*</span></label>
-            <div className="resume-drop">
+          <div className="resume-drop">
             <input
-                type="file"
-                name="resume"
-                accept=".pdf,.doc,.docx"
-                onChange={(e) => setForm({ ...form, resume: e.target.files[0] })}
+              type="file"
+              name="resume"
+              accept=".pdf,.doc,.docx"
+              onChange={(e) => setForm({ ...form, resume: e.target.files[0] })}
             />
             {form.resume ? (
-            <>
-                <p style={{ color: 'green', fontWeight: 'bold' }}>✅ {form.resume.name}</p>
+              <>
+                <p style={{ color: 'green', fontWeight: 'bold' }}> {form.resume.name}</p>
                 <p className="resume-hint">Click to change file</p>
-            </>
+              </>
             ) : (
-            <>
+              <>
                 <p>Click to upload or drag and drop</p>
                 <p className="resume-hint">PDF or Word (.doc, .docx)</p>
-            </>
+              </>
             )}            </div>
 
           {/* How did you hear */}

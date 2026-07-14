@@ -17,6 +17,7 @@ const publicUser = (user) => ({
   role: user.role,
   emailVerified: user.emailVerified,
   createdAt: user.createdAt,
+  profileComplete: user.profileComplete
 });
 
 // sign a login token the frontend can store and send back later

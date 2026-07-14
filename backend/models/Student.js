@@ -21,6 +21,7 @@ const studentSchema = new mongoose.Schema({
   },
   hearAboutService: { type: String, required: true },
   otherInformation: { type: String },
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
 }, { timestamps: true });
 
 export default mongoose.model("Student", studentSchema);
