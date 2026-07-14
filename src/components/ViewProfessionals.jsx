@@ -94,17 +94,6 @@ export default function ViewProfessionals({ onClose, category = "Business" }) {
           </svg>
         </div>
 
-        <button
-          type="button"
-          className={styles.searchIconBtn}
-          onClick={() => setSearchOpen((open) => !open)}
-          aria-label="Toggle search"
-        >
-          <svg width="24" height="24" viewBox="0 0 42 42" fill="none">
-            <path d="M37.6775 35.8225L30.9558 29.1007C33.2028 26.4355 34.5625 23.0002 34.5625 19.25C34.5625 10.8063 27.6937 3.9375 19.25 3.9375C10.8063 3.9375 3.9375 10.8063 3.9375 19.25C3.9375 27.6938 10.8063 34.5625 19.25 34.5625C23.0002 34.5625 26.4355 33.2027 29.1008 30.9557L35.8224 37.6775C36.0779 37.933 36.414 38.0625 36.75 38.0625C37.086 38.0625 37.4221 37.9347 37.6775 37.6775C38.1903 37.1665 38.1903 36.3353 37.6775 35.8225ZM6.5625 19.25C6.5625 12.2535 12.2535 6.5625 19.25 6.5625C26.2465 6.5625 31.9375 12.2535 31.9375 19.25C31.9375 27.6465 26.2465 31.9375 19.25 31.9375C12.2535 31.9375 6.5625 26.2465 6.5625 19.25Z" fill="#ADB5BD" />
-          </svg>
-        </button>
-
         <div className={styles.filterPillWrap}>
           <select
             className={styles.filterPill}
@@ -120,6 +109,17 @@ export default function ViewProfessionals({ onClose, category = "Business" }) {
             <path opacity="0.8" d="M11.4198 21.7007L1.41967 11.5602L11.4198 1.41971" stroke="black" strokeWidth="2.83934" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </div>
+
+        <button
+          type="button"
+          className={styles.searchIconBtn}
+          onClick={() => setSearchOpen((open) => !open)}
+          aria-label="Toggle search"
+        >
+          <svg width="24" height="24" viewBox="0 0 42 42" fill="none">
+            <path d="M37.6775 35.8225L30.9558 29.1007C33.2028 26.4355 34.5625 23.0002 34.5625 19.25C34.5625 10.8063 27.6937 3.9375 19.25 3.9375C10.8063 3.9375 3.9375 10.8063 3.9375 19.25C3.9375 27.6938 10.8063 34.5625 19.25 34.5625C23.0002 34.5625 26.4355 33.2027 29.1008 30.9557L35.8224 37.6775C36.0779 37.933 36.414 38.0625 36.75 38.0625C37.086 38.0625 37.4221 37.9347 37.6775 37.6775C38.1903 37.1665 38.1903 36.3353 37.6775 35.8225ZM6.5625 19.25C6.5625 12.2535 12.2535 6.5625 19.25 6.5625C26.2465 6.5625 31.9375 12.2535 31.9375 19.25C31.9375 27.6465 26.2465 31.9375 19.25 31.9375C12.2535 31.9375 6.5625 26.2465 6.5625 19.25Z" fill="#ADB5BD" />
+          </svg>
+        </button>
       </div>
 
       {searchOpen && (
