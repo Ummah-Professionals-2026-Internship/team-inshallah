@@ -2,8 +2,8 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import LoginPage from "./components/LoginPage";
 import SignupPage from "./components/SignupPage";
 import EmailVerification from "./components/EmailVerification";
-import StudentForm from './components/StudentForm';
-import ProfessionalForm from './components/ProfessionalForm';
+import StudentForm from './StudentForm';
+import ProfessionalForm from './ProfessionalForm';
 import StudentDashboard from './components/StudentDashboard';
 import ProfessionalDashboard from './components/ProfessionalDashboard';
 
@@ -13,9 +13,6 @@ export default function App() {
             <Routes>
                 <Route path="/" element={<LoginPage />} />
                 <Route path="/signup" element={<SignupPage />} />
-                <Route path="/verify-email" element={<EmailVerification />} />
-                <Route path="/student-form" element={<StudentForm />} />
-                <Route path="/professional-form" element={<ProfessionalForm />} />
                 <Route path="/verify-email" element={<EmailVerification />} />
                 <Route path="/student-form" element={<StudentForm />} />
                 <Route path="/professional-form" element={<ProfessionalForm />} />
