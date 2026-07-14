@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import '../forms.css';
+import './forms.css';
 import logo from '../assets/Brand Kit/Logos/PNGs/horizontal blue.png';
 import bg from '../assets/Brand Kit/careerprep-bg.png';
 
@@ -30,7 +30,6 @@ export default function ProfessionalForm() {
     
     const [errors, setErrors] = useState({});
     const [status, setStatus] = useState(null);
-    const navigate = useNavigate();
 
   function handleChange(e) {
     setForm({ ...form, [e.target.name]: e.target.value });

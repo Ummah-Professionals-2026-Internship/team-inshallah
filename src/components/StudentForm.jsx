@@ -25,7 +25,7 @@ export default function StudentForm() {
 
   const [errors, setErrors] = useState({});
   const [status, setStatus] = useState(null);
-  const navigate = useNavigate();
+  
 
   function handleChange(e) {
     setForm({ ...form, [e.target.name]: e.target.value });
