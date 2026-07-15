@@ -102,78 +102,75 @@ export default function Dashboard({
         </nav>
       )}
 
-      <main className={styles.main}>
-        {children ? (
-          children
-        ) : (
-          <>
-            <h1 className={styles.welcome}>Welcome {userName.split(" ")[0]}!</h1>
+     <main className={styles.main}>
+        <h1 className={styles.welcome}>Welcome {userName.split(" ")[0]}!</h1>
 
-            <div className={styles.grid}>
-              <div className={styles.leftColumn}>
-                <section className={styles.container}>
-                  <h2 className={styles.sectionTitle}>Upcoming Meetings</h2>
-                  <div className={styles.sectionBoxLarge}>
-                    {upcomingMeetings.length === 0 ? (
-                      <p className={styles.emptyText}>No upcoming meetings yet.</p>
-                    ) : (
-                      upcomingMeetings.map((meeting) => (
-                        <div key={meeting.id} className={styles.meetingRow}>
-                          <p className={styles.meetingName}>{meeting.with}</p>
-                          <p className={styles.meetingDate}>{meeting.date}</p>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </section>
-
-                <section className={styles.container}>
-                  <h2 className={styles.sectionTitle}>Previous Meetings</h2>
-                  <div className={styles.sectionBoxSmall}>
-                    {previousMeetings.length === 0 ? (
-                      <p className={styles.emptyText}>No previous meetings yet.</p>
-                    ) : (
-                      previousMeetings.map((meeting) => (
-                        <div key={meeting.id} className={styles.meetingRow}>
-                          <p className={styles.meetingName}>{meeting.with}</p>
-                          <p className={styles.meetingDate}>{meeting.date}</p>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </section>
+        <div className={styles.grid}>
+          <div className={styles.leftColumn}>
+            <section className={styles.container}>
+              <h2 className={styles.sectionTitle}>Upcoming Meetings</h2>
+              <div className={styles.sectionBoxLarge}>
+                {upcomingMeetings.length === 0 ? (
+                  <p className={styles.emptyText}>No upcoming meetings yet.</p>
+                ) : (
+                  upcomingMeetings.map((meeting) => (
+                    <div key={meeting.id} className={styles.meetingRow}>
+                      <p className={styles.meetingName}>{meeting.with}</p>
+                      <p className={styles.meetingDate}>{meeting.date}</p>
+                    </div>
+                  ))
+                )}
               </div>
+            </section>
 
-              <div className={styles.rightColumn}>
-                <section className={styles.todoContainer}>
-                  <div className={styles.todoHeaderWrapper}>
-                    <h2 className={styles.todoBoxTitle}>To-Do List</h2>
-                  </div>
-                  <div className={styles.todoList}>
-                    {todoItems.map((item, index) => (
-                      <button
-                        key={item}
-                        type="button"
-                        className={styles.todoItem}
-                        onClick={() => toggleTodo(index)}
-                        aria-pressed={!!checked[index]}
-                      >
-                        <span
-                          className={`${styles.todoCircle} ${
-                            checked[index] ? styles.todoCircleChecked : ""
-                          }`}
-                        />
-                        <span className={checked[index] ? styles.todoTextChecked : ""}>
-                          {item}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                </section>
+            <section className={styles.container}>
+              <h2 className={styles.sectionTitle}>Previous Meetings</h2>
+              <div className={styles.sectionBoxSmall}>
+                {previousMeetings.length === 0 ? (
+                  <p className={styles.emptyText}>No previous meetings yet.</p>
+                ) : (
+                  previousMeetings.map((meeting) => (
+                    <div key={meeting.id} className={styles.meetingRow}>
+                      <p className={styles.meetingName}>{meeting.with}</p>
+                      <p className={styles.meetingDate}>{meeting.date}</p>
+                    </div>
+                  ))
+                )}
               </div>
-            </div>
-          </>
-        )}
+            </section>
+          </div>
+
+          <div className={styles.rightColumn}>
+            <section className={styles.todoContainer}>
+              <div className={styles.todoHeaderWrapper}>
+                <h2 className={styles.todoBoxTitle}>To-Do List</h2>
+              </div>
+              <div className={styles.todoList}>
+                {todoItems.map((item, index) => (
+                  <button
+                    key={item}
+                    type="button"
+                    className={styles.todoItem}
+                    onClick={() => toggleTodo(index)}
+                    aria-pressed={!!checked[index]}
+                  >
+                    <span
+                      className={`${styles.todoCircle} ${
+                        checked[index] ? styles.todoCircleChecked : ""
+                      }`}
+                    />
+                    <span className={checked[index] ? styles.todoTextChecked : ""}>
+                      {item}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </section>
+          </div>
+        </div>
+
+        {children}
+      
       </main>
     </div>
   );

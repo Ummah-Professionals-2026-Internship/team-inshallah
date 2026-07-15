@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import Dashboard from "./Dashboard";
 import ProfessionalProfile from "./ProfessionalProfile";
+import AvailabilityModal from "./AvailabilityModal";
 
 const PROFESSIONAL_NAV_LINKS = [
   { label: "Home" },
@@ -16,7 +17,7 @@ const PROFESSIONAL_TODO = [
 const UPCOMING_MEETINGS = [];
 const PREVIOUS_MEETINGS = [];
 
-export default function ProfessionalDashboard({ userName = "Ashar Faisal" }) {
+export default function ProfessionalDashboard({ userName = " " }) {
   const [activeView, setActiveView] = useState("home");
   const [profilePhoto, setProfilePhoto] = useState("");
   const [displayName, setDisplayName] = useState(userName);
@@ -37,7 +38,7 @@ export default function ProfessionalDashboard({ userName = "Ashar Faisal" }) {
           setDisplayName(body.profile.name);
         }
       })
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   const handleNavClick = (label) => {
@@ -48,6 +49,7 @@ export default function ProfessionalDashboard({ userName = "Ashar Faisal" }) {
     }
   };
 
+  
   return (
     <Dashboard
       userName={displayName}
@@ -60,16 +62,13 @@ export default function ProfessionalDashboard({ userName = "Ashar Faisal" }) {
       onNavClick={handleNavClick}
       onProfileClick={() => setActiveView("profile")}
     >
-      {activeView === "availability" ? (
-        <div style={{ padding: "24px" }}>
-          <h1 style={{ color: "#0a7ea4", fontFamily: "Montserrat, sans-serif" }}>
-            Update Availability
-          </h1>
-          <p>Coming soon — this page is still being built.</p>
-        </div>
-      ) : activeView === "profile" ? (
+      {activeView === "profile" ? (
         <ProfessionalProfile onClose={() => setActiveView("home")} />
       ) : null}
+
+      {activeView === "availability" && (
+        <AvailabilityModal onClose={() => setActiveView("home")} />
+      )}
     </Dashboard>
   );
 }
