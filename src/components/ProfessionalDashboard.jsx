@@ -16,7 +16,7 @@ const PROFESSIONAL_TODO = [
 const UPCOMING_MEETINGS = [];
 const PREVIOUS_MEETINGS = [];
 
-export default function ProfessionalDashboard({ userName = "Ashar Faisal" }) {
+export default function ProfessionalDashboard({ userName = " " }) {
   const [activeView, setActiveView] = useState("home");
   const [profilePhoto, setProfilePhoto] = useState("");
   const [displayName, setDisplayName] = useState(userName);
