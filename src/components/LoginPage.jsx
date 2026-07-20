@@ -44,10 +44,6 @@ export default function LoginPage() {
                 return;
             }
 
-            if (!data.user.profileComplete) {
-                navigate(data.user.role === "student" ? "/student-form" : "/professional-form");
-                return;
-            }
 
             navigate(data.user.role === "student" ? "/student-dashboard" : "/professional-dashboard");
         } catch (err) {

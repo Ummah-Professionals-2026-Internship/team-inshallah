@@ -553,6 +553,8 @@ app.put(
         });
       }
 
+      console.log("DEBUG professional userId:", professional.userId);
+
       const data = buildProfileData(
         req.body,
         professionalFields
@@ -743,26 +745,28 @@ app.get("/api/professionals", async (req, res) => {
       );
 
     const cardData = await Promise.all(
-      paginatedResults.map(
-        async (professional) => ({
-          id: professional._id,
-          name: professional.name,
-          jobTitle: professional.jobTitle,
-          summary: professional.summary,
-
-          photo: await getSignedFileUrl(
-            professional.photo ||
-              professional.profilePicture
-          ),
-
-          linkedin: professional.linkedin,
-          website: professional.website,
-          github: professional.github,
-          industry: professional.industry,
-          services: professional.services,
-        })
-      )
-    );
+  paginatedResults.map(
+    async (professional) => ({
+      id: professional._id,
+      name: professional.name,
+      jobTitle: professional.jobTitle,
+      summary: professional.summary || professional.aboutMe,
+      aboutMe: professional.aboutMe,                    
+      phone: professional.phone,                        
+      resume: await getSignedFileUrl(professional.resume),
+      photo: await getSignedFileUrl(
+        professional.photo || professional.profilePicture
+      ),
+      linkedin: professional.linkedin,
+      website: professional.website,
+      github: professional.github,
+      other: professional.externalLinks?.other || "",
+      industry: professional.industry,
+      services: professional.services,
+      otherInformation: professional.otherInformation,  // NEW
+    })
+  )
+);
 
     res.json({
       professionals: cardData,
