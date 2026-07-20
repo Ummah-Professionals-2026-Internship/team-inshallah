@@ -19,6 +19,9 @@ import authRoutes from "./routes/auth.js";
 import emailVerificationRoutes from "./routes/emailVerification.js";
 import { requireAuth } from "./middleware/auth.js";
 import User from "./models/User.js";
+import { google } from "googleapis";
+import CalendarConnection from "./models/CalendarConnection.js";
+import { encryptToken, decryptToken } from "./utils/tokenCrypto.js";
 
 dotenv.config();
 
@@ -100,6 +103,13 @@ const upload = multer({
     },
   }),
 });
+
+// ===== GOOGLE CALENDAR OAUTH SETUP =====
+const googleOAuthClient = new google.auth.OAuth2(
+  process.env.GOOGLE_CLIENT_ID,
+  process.env.GOOGLE_CLIENT_SECRET,
+  process.env.GOOGLE_REDIRECT_URI
+);
 
 // ===== HELPERS =====
 const deleteFromS3 = async (key) => {
@@ -747,10 +757,6 @@ app.delete("/api/availability", requireAuth, async (req, res) => {
   }
 });
 
-app.listen(process.env.PORT, () => {
-  console.log(`Server running on port ${process.env.PORT}`);
-});
-
 // ===== POST /api/meetings — book a meeting with a professional =====
 app.post("/api/meetings", requireAuth, async (req, res) => {
   try {
@@ -782,31 +788,31 @@ app.post("/api/meetings", requireAuth, async (req, res) => {
     endOfWeek.setDate(endOfWeek.getDate() + 7);
 
     const meetingThisWeek = await Meeting.findOne({
-  professional: professional._id,
-  status: { $in: ["scheduled", "completed"] },
-  date: { $gte: startOfWeek, $lt: endOfWeek },
-});
+      professional: professional._id,
+      status: { $in: ["scheduled", "completed"] },
+      date: { $gte: startOfWeek, $lt: endOfWeek },
+    });
 
-if (meetingThisWeek) {
-  return res.status(400).json({
-    message: "This professional already has a meeting booked this week.",
-  });
-}
+    if (meetingThisWeek) {
+      return res.status(400).json({
+        message: "This professional already has a meeting booked this week.",
+      });
+    }
 
-// enforce: student can only book one meeting per week (with any professional)
-const studentMeetingThisWeek = await Meeting.findOne({
-  student: student._id,
-  status: { $in: ["scheduled", "completed"] },
-  date: { $gte: startOfWeek, $lt: endOfWeek },
-});
+    // enforce: student can only book one meeting per week (with any professional)
+    const studentMeetingThisWeek = await Meeting.findOne({
+      student: student._id,
+      status: { $in: ["scheduled", "completed"] },
+      date: { $gte: startOfWeek, $lt: endOfWeek },
+    });
 
-if (studentMeetingThisWeek) {
-  return res.status(400).json({
-    message: "You already have a meeting booked this week.",
-  });
-}
+    if (studentMeetingThisWeek) {
+      return res.status(400).json({
+        message: "You already have a meeting booked this week.",
+      });
+    }
 
-const meeting = await Meeting.create({
+    const meeting = await Meeting.create({
       professional: professional._id,
       student: student._id,
       date: meetingDate,
@@ -823,7 +829,7 @@ const meeting = await Meeting.create({
 // ===== GET /api/availability/:professionalUserId — public view of a professional's availability + booked slots =====
 app.get("/api/availability/:professionalUserId", async (req, res) => {
   try {
-    const availability = await Availability.findOne({ userId: req.professionalUserId || req.params.professionalUserId });
+    const availability = await Availability.findOne({ userId: req.params.professionalUserId });
     if (!availability) {
       return res.status(404).json({ message: "No availability set for this professional." });
     }
@@ -850,4 +856,116 @@ app.get("/api/availability/:professionalUserId", async (req, res) => {
     console.log("GET PUBLIC AVAILABILITY ERROR:", err);
     res.status(500).json({ message: "Server error. Please try again later." });
   }
+});
+
+// ===== GET /api/calendar/google/connect — redirect user to Google's login/consent screen =====
+app.get("/api/calendar/google/connect", requireAuth, (req, res) => {
+  const authUrl = googleOAuthClient.generateAuthUrl({
+    access_type: "offline", // needed to get a refresh token
+    scope: ["https://www.googleapis.com/auth/calendar.readonly"],
+    state: req.userId, // pass the user's ID through so we know who's connecting when Google sends them back
+    prompt: "consent",
+  });
+
+  res.json({ url: authUrl });
+});
+
+// ===== GET /api/calendar/google/callback — Google redirects here after the user approves access =====
+app.get("/api/calendar/google/callback", async (req, res) => {
+  try {
+    const { code, state } = req.query;
+    const userId = state;
+
+    if (!code || !userId) {
+      return res.status(400).json({ message: "Missing authorization code or user." });
+    }
+
+    const { tokens } = await googleOAuthClient.getToken(code);
+
+    if (!tokens.access_token || !tokens.refresh_token) {
+      return res.status(400).json({
+        message: "Failed to get calendar access. Please try connecting again.",
+      });
+    }
+
+    await CalendarConnection.findOneAndUpdate(
+      { userId, provider: "google" },
+      {
+        userId,
+        provider: "google",
+        accessToken: encryptToken(tokens.access_token),
+        refreshToken: encryptToken(tokens.refresh_token),
+        calendarId: "primary",
+        lastSynced: new Date(),
+        syncStatus: "ok",
+      },
+      { upsert: true, new: true }
+    );
+
+    res.send("Google Calendar connected! You can close this tab.");
+  } catch (err) {
+    console.log("GOOGLE CALLBACK ERROR:", err);
+    res.status(500).json({ message: "Failed to connect Google Calendar. Please try again." });
+  }
+});
+
+// ===== GET /api/calendar/google/busy — fetch busy time blocks from the connected Google Calendar =====
+app.get("/api/calendar/google/busy", requireAuth, async (req, res) => {
+  try {
+    const connection = await CalendarConnection.findOne({ userId: req.userId, provider: "google" });
+
+    if (!connection) {
+      return res.status(404).json({ message: "No Google Calendar connected." });
+    }
+
+    // fresh client per request so simultaneous users don't overwrite each other's credentials
+    const userClient = new google.auth.OAuth2(
+      process.env.GOOGLE_CLIENT_ID,
+      process.env.GOOGLE_CLIENT_SECRET,
+      process.env.GOOGLE_REDIRECT_URI
+    );
+
+    userClient.setCredentials({
+      access_token: decryptToken(connection.accessToken),
+      refresh_token: decryptToken(connection.refreshToken),
+    });
+
+    const calendar = google.calendar({ version: "v3", auth: userClient });
+
+    const now = new Date();
+    const oneMonthOut = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+
+    const response = await calendar.freebusy.query({
+      requestBody: {
+        timeMin: now.toISOString(),
+        timeMax: oneMonthOut.toISOString(),
+        items: [{ id: connection.calendarId }],
+      },
+    });
+
+    const busyTimes = response.data.calendars[connection.calendarId].busy;
+
+    await CalendarConnection.findByIdAndUpdate(connection._id, {
+      lastSynced: new Date(),
+      syncStatus: "ok",
+    });
+
+    res.json({ busy: busyTimes });
+  } catch (err) {
+    console.log("GOOGLE BUSY FETCH ERROR:", err);
+
+    // mark the connection as failed/expired so the user knows to reconnect
+    await CalendarConnection.findOneAndUpdate(
+      { userId: req.userId, provider: "google" },
+      { syncStatus: "failed" }
+    );
+
+    res.status(500).json({
+      message: "Failed to sync with Google Calendar. Your connection may have expired — please reconnect.",
+    });
+  }
+});
+
+app.listen(process.env.PORT, () => {
+  console.log(`Server running on port ${process.env.PORT}`);
 });
