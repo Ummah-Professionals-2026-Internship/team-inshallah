@@ -14,6 +14,7 @@ import connectDB from "./config/db.js";
 import Student from "./models/Student.js";
 import Professional from "./models/Professional.js";
 import Meeting from "./models/Meeting.js";
+import Availability from "./models/Availability.js";
 import authRoutes from "./routes/auth.js";
 import emailVerificationRoutes from "./routes/emailVerification.js";
 import { requireAuth } from "./middleware/auth.js";
@@ -553,7 +554,6 @@ app.put(
         });
       }
 
-      console.log("DEBUG professional userId:", professional.userId);
 
       const data = buildProfileData(
         req.body,
@@ -748,6 +748,7 @@ app.get("/api/professionals", async (req, res) => {
   paginatedResults.map(
     async (professional) => ({
       id: professional._id,
+      userId: professional.user,
       name: professional.name,
       jobTitle: professional.jobTitle,
       summary: professional.summary || professional.aboutMe,
@@ -884,6 +885,271 @@ app.patch(
     }
   }
 );
+
+// ===== HELPERS for availability validation =====
+const timeToMinutes = (timeStr) => {
+  const [h, m] = timeStr.split(":").map(Number);
+  return h * 60 + m;
+};
+
+const validateBlock = (block) => {
+  if (!block.type || !["weekly", "specific"].includes(block.type)) {
+    return "Each block must have type 'weekly' or 'specific'.";
+  }
+  if (block.type === "weekly" && (block.dayOfWeek === undefined || block.dayOfWeek < 0 || block.dayOfWeek > 6)) {
+    return "Weekly blocks need a valid dayOfWeek (0-6).";
+  }
+  if (block.type === "specific" && !block.date) {
+    return "Specific blocks need a date (e.g. '2026-06-23').";
+  }
+  if (!block.start || !block.end) {
+    return "Each block needs a start and end time.";
+  }
+  const startMinutes = timeToMinutes(block.start);
+  const endMinutes = timeToMinutes(block.end);
+  if (startMinutes >= endMinutes) {
+    return "Start time must be before end time.";
+  }
+  if (endMinutes - startMinutes < 60) {
+    return "Each block must be at least 1 hour long.";
+  }
+  return null;
+};
+
+const blocksOverlap = (a, b) => {
+  if (a.type !== b.type) return false;
+  if (a.type === "weekly" && a.dayOfWeek !== b.dayOfWeek) return false;
+  if (a.type === "specific" && a.date !== b.date) return false;
+
+  const aStart = timeToMinutes(a.start);
+  const aEnd = timeToMinutes(a.end);
+  const bStart = timeToMinutes(b.start);
+  const bEnd = timeToMinutes(b.end);
+
+  return aStart < bEnd && bStart < aEnd;
+};
+
+const validateBlocks = (blocks) => {
+  for (const block of blocks) {
+    const error = validateBlock(block);
+    if (error) return error;
+  }
+  for (let i = 0; i < blocks.length; i++) {
+    for (let j = i + 1; j < blocks.length; j++) {
+      if (blocksOverlap(blocks[i], blocks[j])) {
+        return "Availability blocks cannot overlap.";
+      }
+    }
+  }
+  return null;
+};
+
+
+// ===== GET /api/availability — get the logged-in user's availability =====
+app.get("/api/availability", requireAuth, async (req, res) => {
+  try {
+    const availability = await Availability.findOne({ userId: req.userId });
+    if (!availability) {
+      return res.status(404).json({ message: "No availability set yet." });
+    }
+    res.json({ availability });
+  } catch (err) {
+    console.log("GET AVAILABILITY ERROR:", err);
+    res.status(500).json({ message: "Server error. Please try again later." });
+  }
+});
+
+// ===== POST /api/availability — create the logged-in user's availability (first time) =====
+app.post("/api/availability", requireAuth, async (req, res) => {
+  try {
+    const user = await User.findById(req.userId);
+    if (!user || user.role !== "professional") {
+      return res.status(403).json({ message: "Only professionals can manage availability." });
+    }
+
+    const { timezone, availability } = req.body;
+
+    if (!timezone) {
+      return res.status(400).json({ message: "Timezone is required." });
+    }
+    if (!Array.isArray(availability)) {
+      return res.status(400).json({ message: "Availability must be an array of blocks." });
+    }
+
+    const validationError = validateBlocks(availability);
+    if (validationError) {
+      return res.status(400).json({ message: validationError });
+    }
+
+    const existing = await Availability.findOne({ userId: req.userId });
+    if (existing) {
+      return res.status(400).json({ message: "Availability already exists. Use PUT to update it." });
+    }
+
+    const created = await Availability.create({
+      userId: req.userId,
+      timezone,
+      availability,
+    });
+
+    res.status(201).json({ message: "Availability created.", availability: created });
+  } catch (err) {
+    console.log("POST AVAILABILITY ERROR:", err);
+    res.status(500).json({ message: "Server error. Please try again later." });
+  }
+});
+
+// ===== PUT /api/availability — update the logged-in user's availability =====
+app.put("/api/availability", requireAuth, async (req, res) => {
+  try {
+    const user = await User.findById(req.userId);
+    if (!user || user.role !== "professional") {
+      return res.status(403).json({ message: "Only professionals can manage availability." });
+    }
+
+    const { timezone, availability } = req.body;
+
+    if (!Array.isArray(availability)) {
+      return res.status(400).json({ message: "Availability must be an array of blocks." });
+    }
+
+    const validationError = validateBlocks(availability);
+    if (validationError) {
+      return res.status(400).json({ message: validationError });
+    }
+
+    const updated = await Availability.findOneAndUpdate(
+      { userId: req.userId },
+      { timezone, availability, updatedAt: new Date() },
+      { new: true, upsert: true }
+    );
+
+    res.json({ message: "Availability updated.", availability: updated });
+  } catch (err) {
+    console.log("PUT AVAILABILITY ERROR:", err);
+    res.status(500).json({ message: "Server error. Please try again later." });
+  }
+});
+
+// ===== DELETE /api/availability — clear the logged-in user's availability =====
+app.delete("/api/availability", requireAuth, async (req, res) => {
+  try {
+    const user = await User.findById(req.userId);
+    if (!user || user.role !== "professional") {
+      return res.status(403).json({ message: "Only professionals can manage availability." });
+    }
+
+    const deleted = await Availability.findOneAndDelete({ userId: req.userId });
+    if (!deleted) {
+      return res.status(404).json({ message: "No availability found to delete." });
+    }
+    res.json({ message: "Availability deleted." });
+  } catch (err) {
+    console.log("DELETE AVAILABILITY ERROR:", err);
+    res.status(500).json({ message: "Server error. Please try again later." });
+  }
+});
+
+// ===== POST /api/meetings — book a meeting with a professional =====
+app.post("/api/meetings", requireAuth, async (req, res) => {
+  try {
+    const { professionalId, date } = req.body;
+
+    if (!professionalId || !date) {
+      return res.status(400).json({ message: "professionalId and date are required." });
+    }
+
+    const meetingDate = new Date(date);
+    if (isNaN(meetingDate.getTime())) {
+      return res.status(400).json({ message: "Invalid date." });
+    }
+
+    const student = await Student.findOne({ user: req.userId });
+    if (!student) {
+      return res.status(404).json({ message: "Student profile not found." });
+    }
+
+    const professional = await Professional.findById(professionalId);
+    if (!professional) {
+      return res.status(404).json({ message: "Professional not found." });
+    }
+
+    const startOfWeek = new Date(meetingDate);
+    startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay());
+    startOfWeek.setHours(0, 0, 0, 0);
+    const endOfWeek = new Date(startOfWeek);
+    endOfWeek.setDate(endOfWeek.getDate() + 7);
+
+    const meetingThisWeek = await Meeting.findOne({
+  professional: professional._id,
+  status: { $in: ["scheduled", "completed"] },
+  date: { $gte: startOfWeek, $lt: endOfWeek },
+});
+
+if (meetingThisWeek) {
+  return res.status(400).json({
+    message: "This professional already has a meeting booked this week.",
+  });
+}
+
+// enforce: student can only book one meeting per week (with any professional)
+const studentMeetingThisWeek = await Meeting.findOne({
+  student: student._id,
+  status: { $in: ["scheduled", "completed"] },
+  date: { $gte: startOfWeek, $lt: endOfWeek },
+});
+
+if (studentMeetingThisWeek) {
+  return res.status(400).json({
+    message: "You already have a meeting booked this week.",
+  });
+}
+
+const meeting = await Meeting.create({
+      professional: professional._id,
+      student: student._id,
+      date: meetingDate,
+      status: "scheduled",
+    });
+
+    res.status(201).json({ message: "Meeting booked!", meeting });
+  } catch (err) {
+    console.log("BOOK MEETING ERROR:", err);
+    res.status(500).json({ message: "Server error. Please try again later." });
+  }
+});
+
+// ===== GET /api/availability/:professionalUserId — public view of a professional's availability + booked slots =====
+app.get("/api/availability/:professionalUserId", async (req, res) => {
+  try {
+    const availability = await Availability.findOne({ userId: req.professionalUserId || req.params.professionalUserId });
+    if (!availability) {
+      return res.status(404).json({ message: "No availability set for this professional." });
+    }
+
+    const professional = await Professional.findOne({ user: req.params.professionalUserId });
+    if (!professional) {
+      return res.status(404).json({ message: "Professional not found." });
+    }
+
+    // find their upcoming booked meetings so we know which slots are taken
+    const now = new Date();
+    const bookedMeetings = await Meeting.find({
+      professional: professional._id,
+      status: { $in: ["scheduled", "completed"] },
+      date: { $gte: now },
+    }).select("date -_id");
+
+    res.json({
+      timezone: availability.timezone,
+      availability: availability.availability,
+      bookedSlots: bookedMeetings.map((m) => m.date),
+    });
+  } catch (err) {
+    console.log("GET PUBLIC AVAILABILITY ERROR:", err);
+    res.status(500).json({ message: "Server error. Please try again later." });
+  }
+});
 
 app.listen(process.env.PORT, () => {
   console.log(
