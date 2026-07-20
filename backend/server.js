@@ -556,7 +556,7 @@ app.get("/api/professionals", async (req, res) => {
         const daysSinceLastMeeting =
           (now.getTime() - mostRecentMeeting.date.getTime()) / (24 * 60 * 60 * 1000);
 
-        if (meetingsLastMonth >= 2 && daysSinceLastMeeting < 21) {
+        if (meetingsLastMonth >= 2 && daysSinceLastMeeting < 30) {
           isHidden = true;
         } else if (meetingsLastWeek >= 1 && daysSinceLastMeeting < 7) {
           isHidden = true;
@@ -659,6 +659,11 @@ app.get("/api/availability", requireAuth, async (req, res) => {
 // ===== POST /api/availability — create the logged-in user's availability (first time) =====
 app.post("/api/availability", requireAuth, async (req, res) => {
   try {
+    const user = await User.findById(req.userId);
+    if (!user || user.role !== "professional") {
+      return res.status(403).json({ message: "Only professionals can manage availability." });
+    }
+
     const { timezone, availability } = req.body;
 
     if (!timezone) {
@@ -694,6 +699,11 @@ app.post("/api/availability", requireAuth, async (req, res) => {
 // ===== PUT /api/availability — update the logged-in user's availability =====
 app.put("/api/availability", requireAuth, async (req, res) => {
   try {
+    const user = await User.findById(req.userId);
+    if (!user || user.role !== "professional") {
+      return res.status(403).json({ message: "Only professionals can manage availability." });
+    }
+
     const { timezone, availability } = req.body;
 
     if (!Array.isArray(availability)) {
@@ -721,6 +731,11 @@ app.put("/api/availability", requireAuth, async (req, res) => {
 // ===== DELETE /api/availability — clear the logged-in user's availability =====
 app.delete("/api/availability", requireAuth, async (req, res) => {
   try {
+    const user = await User.findById(req.userId);
+    if (!user || user.role !== "professional") {
+      return res.status(403).json({ message: "Only professionals can manage availability." });
+    }
+
     const deleted = await Availability.findOneAndDelete({ userId: req.userId });
     if (!deleted) {
       return res.status(404).json({ message: "No availability found to delete." });
@@ -734,4 +749,105 @@ app.delete("/api/availability", requireAuth, async (req, res) => {
 
 app.listen(process.env.PORT, () => {
   console.log(`Server running on port ${process.env.PORT}`);
+});
+
+// ===== POST /api/meetings — book a meeting with a professional =====
+app.post("/api/meetings", requireAuth, async (req, res) => {
+  try {
+    const { professionalId, date } = req.body;
+
+    if (!professionalId || !date) {
+      return res.status(400).json({ message: "professionalId and date are required." });
+    }
+
+    const meetingDate = new Date(date);
+    if (isNaN(meetingDate.getTime())) {
+      return res.status(400).json({ message: "Invalid date." });
+    }
+
+    const student = await Student.findOne({ user: req.userId });
+    if (!student) {
+      return res.status(404).json({ message: "Student profile not found." });
+    }
+
+    const professional = await Professional.findById(professionalId);
+    if (!professional) {
+      return res.status(404).json({ message: "Professional not found." });
+    }
+
+    const startOfWeek = new Date(meetingDate);
+    startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay());
+    startOfWeek.setHours(0, 0, 0, 0);
+    const endOfWeek = new Date(startOfWeek);
+    endOfWeek.setDate(endOfWeek.getDate() + 7);
+
+    const meetingThisWeek = await Meeting.findOne({
+  professional: professional._id,
+  status: { $in: ["scheduled", "completed"] },
+  date: { $gte: startOfWeek, $lt: endOfWeek },
+});
+
+if (meetingThisWeek) {
+  return res.status(400).json({
+    message: "This professional already has a meeting booked this week.",
+  });
+}
+
+// enforce: student can only book one meeting per week (with any professional)
+const studentMeetingThisWeek = await Meeting.findOne({
+  student: student._id,
+  status: { $in: ["scheduled", "completed"] },
+  date: { $gte: startOfWeek, $lt: endOfWeek },
+});
+
+if (studentMeetingThisWeek) {
+  return res.status(400).json({
+    message: "You already have a meeting booked this week.",
+  });
+}
+
+const meeting = await Meeting.create({
+      professional: professional._id,
+      student: student._id,
+      date: meetingDate,
+      status: "scheduled",
+    });
+
+    res.status(201).json({ message: "Meeting booked!", meeting });
+  } catch (err) {
+    console.log("BOOK MEETING ERROR:", err);
+    res.status(500).json({ message: "Server error. Please try again later." });
+  }
+});
+
+// ===== GET /api/availability/:professionalUserId — public view of a professional's availability + booked slots =====
+app.get("/api/availability/:professionalUserId", async (req, res) => {
+  try {
+    const availability = await Availability.findOne({ userId: req.professionalUserId || req.params.professionalUserId });
+    if (!availability) {
+      return res.status(404).json({ message: "No availability set for this professional." });
+    }
+
+    const professional = await Professional.findOne({ user: req.params.professionalUserId });
+    if (!professional) {
+      return res.status(404).json({ message: "Professional not found." });
+    }
+
+    // find their upcoming booked meetings so we know which slots are taken
+    const now = new Date();
+    const bookedMeetings = await Meeting.find({
+      professional: professional._id,
+      status: { $in: ["scheduled", "completed"] },
+      date: { $gte: now },
+    }).select("date -_id");
+
+    res.json({
+      timezone: availability.timezone,
+      availability: availability.availability,
+      bookedSlots: bookedMeetings.map((m) => m.date),
+    });
+  } catch (err) {
+    console.log("GET PUBLIC AVAILABILITY ERROR:", err);
+    res.status(500).json({ message: "Server error. Please try again later." });
+  }
 });
