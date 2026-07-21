@@ -966,6 +966,155 @@ app.get("/api/calendar/google/busy", requireAuth, async (req, res) => {
   }
 });
 
+// ===== OUTLOOK (MICROSOFT) CALENDAR OAUTH =====
+const MS_AUTH_BASE = "https://login.microsoftonline.com/consumers/oauth2/v2.0";
+const MS_SCOPES = "offline_access https://graph.microsoft.com/Calendars.Read";
+
+// ===== GET /api/calendar/outlook/connect — redirect user to Microsoft's login/consent screen =====
+app.get("/api/calendar/outlook/connect", requireAuth, (req, res) => {
+  const params = new URLSearchParams({
+    client_id: process.env.MS_CLIENT_ID,
+    response_type: "code",
+    redirect_uri: process.env.MS_REDIRECT_URI,
+    response_mode: "query",
+    scope: MS_SCOPES, // offline_access is what gets us a refresh token
+    state: req.userId, // pass the user's ID through so we know who's connecting on the way back
+    prompt: "consent",
+  });
+
+  res.json({ url: `${MS_AUTH_BASE}/authorize?${params.toString()}` });
+});
+
+// ===== GET /api/calendar/outlook/callback — Microsoft redirects here after the user approves access =====
+app.get("/api/calendar/outlook/callback", async (req, res) => {
+  try {
+    const { code, state, error, error_description } = req.query;
+    const userId = state;
+
+    if (error) {
+      console.log("OUTLOOK CONSENT ERROR:", error, error_description);
+      return res.status(400).json({ message: "Microsoft sign-in was cancelled or failed. Please try again." });
+    }
+    if (!code || !userId) {
+      return res.status(400).json({ message: "Missing authorization code or user." });
+    }
+
+    // exchange the code for tokens
+    const tokenRes = await fetch(`${MS_AUTH_BASE}/token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: process.env.MS_CLIENT_ID,
+        client_secret: process.env.MS_CLIENT_SECRET,
+        code,
+        grant_type: "authorization_code",
+        redirect_uri: process.env.MS_REDIRECT_URI,
+        scope: MS_SCOPES,
+      }),
+    });
+
+    const tokens = await tokenRes.json();
+
+    if (!tokenRes.ok || !tokens.access_token || !tokens.refresh_token) {
+      console.log("OUTLOOK TOKEN EXCHANGE ERROR:", tokens);
+      return res.status(400).json({
+        message: "Failed to get calendar access. Please try connecting again.",
+      });
+    }
+
+    await CalendarConnection.findOneAndUpdate(
+      { userId, provider: "outlook" },
+      {
+        userId,
+        provider: "outlook",
+        accessToken: encryptToken(tokens.access_token),
+        refreshToken: encryptToken(tokens.refresh_token),
+        calendarId: "primary",
+        lastSynced: new Date(),
+        syncStatus: "ok",
+      },
+      { upsert: true, new: true }
+    );
+
+    res.send("Outlook Calendar connected! You can close this tab.");
+  } catch (err) {
+    console.log("OUTLOOK CALLBACK ERROR:", err);
+    res.status(500).json({ message: "Failed to connect Outlook Calendar. Please try again." });
+  }
+});
+
+// ===== GET /api/calendar/outlook/busy — fetch busy time blocks from the connected Outlook Calendar =====
+app.get("/api/calendar/outlook/busy", requireAuth, async (req, res) => {
+  try {
+    const connection = await CalendarConnection.findOne({ userId: req.userId, provider: "outlook" });
+
+    if (!connection) {
+      return res.status(404).json({ message: "No Outlook Calendar connected." });
+    }
+
+    const accessToken = decryptToken(connection.accessToken);
+
+    const now = new Date();
+    const oneMonthOut = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+
+    const firstUrl = new URL("https://graph.microsoft.com/v1.0/me/calendarView");
+    firstUrl.searchParams.set("startDateTime", now.toISOString());
+    firstUrl.searchParams.set("endDateTime", oneMonthOut.toISOString());
+    firstUrl.searchParams.set("$select", "start,end,showAs");
+    firstUrl.searchParams.set("$top", "100");
+
+    // calendarView pages its results, so follow @odata.nextLink until we've got everything
+    const events = [];
+    let nextUrl = firstUrl.toString();
+
+    while (nextUrl) {
+      const graphRes = await fetch(nextUrl, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          Prefer: 'outlook.timezone="UTC"', // return event times in UTC
+        },
+      });
+
+      const data = await graphRes.json();
+
+      if (!graphRes.ok) {
+        console.log("OUTLOOK GRAPH ERROR:", data);
+        throw new Error("Graph calendarView request failed");
+      }
+
+      events.push(...(data.value || []));
+      nextUrl = data["@odata.nextLink"] || null;
+    }
+
+    // match the shape of the Google busy response: [{ start, end }] in ISO UTC
+    const busyTimes = events
+      .filter((event) => event.showAs !== "free")
+      .map((event) => ({
+        start: new Date(event.start.dateTime + "Z").toISOString(),
+        end: new Date(event.end.dateTime + "Z").toISOString(),
+      }));
+
+    await CalendarConnection.findByIdAndUpdate(connection._id, {
+      lastSynced: new Date(),
+      syncStatus: "ok",
+    });
+
+    res.json({ busy: busyTimes });
+  } catch (err) {
+    console.log("OUTLOOK BUSY FETCH ERROR:", err);
+
+    // mark the connection as failed/expired so the user knows to reconnect
+    await CalendarConnection.findOneAndUpdate(
+      { userId: req.userId, provider: "outlook" },
+      { syncStatus: "failed" }
+    );
+
+    res.status(500).json({
+      message: "Failed to sync with Outlook Calendar. Your connection may have expired — please reconnect.",
+    });
+  }
+});
+
 app.listen(process.env.PORT, () => {
   console.log(`Server running on port ${process.env.PORT}`);
 });
