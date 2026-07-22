@@ -14,10 +14,14 @@ import connectDB from "./config/db.js";
 import Student from "./models/Student.js";
 import Professional from "./models/Professional.js";
 import Meeting from "./models/Meeting.js";
+import Availability from "./models/Availability.js";
 import authRoutes from "./routes/auth.js";
 import emailVerificationRoutes from "./routes/emailVerification.js";
 import { requireAuth } from "./middleware/auth.js";
 import User from "./models/User.js";
+import { google } from "googleapis";
+import CalendarConnection from "./models/CalendarConnection.js";
+import { encryptToken, decryptToken } from "./utils/tokenCrypto.js";
 
 dotenv.config();
 
@@ -42,7 +46,6 @@ const s3 = new S3Client({
 async function getSignedFileUrl(storedUrl) {
   if (!storedUrl) return "";
 
-  // Extract the key (the path after the bucket domain)
   const key = storedUrl.split(".amazonaws.com/")[1];
   if (!key) return storedUrl;
 
@@ -51,8 +54,6 @@ async function getSignedFileUrl(storedUrl) {
     Key: key,
   };
 
-  // Only PDFs can render in the browser; force inline for them.
-  // Word docs get their correct type so they download as .docx, not .zip.
   const lowerKey = key.toLowerCase();
 
   if (lowerKey.endsWith(".pdf")) {
@@ -78,10 +79,7 @@ const fileFilter = (req, file, cb) => {
 
   if (file.fieldname === "resume" && resumeTypes.includes(ext)) {
     cb(null, true);
-  } else if (
-    file.fieldname === "profilePicture" &&
-    imageTypes.includes(ext)
-  ) {
+  } else if (file.fieldname === "profilePicture" && imageTypes.includes(ext)) {
     cb(null, true);
   } else {
     cb(new Error("Invalid file type"), false);
@@ -99,29 +97,24 @@ const upload = multer({
       cb(null, { fieldName: file.fieldname });
     },
     key: (req, file, cb) => {
-      const folder =
-        file.fieldname === "profilePicture"
-          ? "profile-pictures"
-          : "resumes";
-
-      const uniqueName = `${folder}/${file.fieldname}-${Date.now()}${path.extname(
-        file.originalname
-      )}`;
-
+      const folder = file.fieldname === "profilePicture" ? "profile-pictures" : "resumes";
+      const uniqueName = `${folder}/${file.fieldname}-${Date.now()}${path.extname(file.originalname)}`;
       cb(null, uniqueName);
     },
   }),
 });
 
+// ===== GOOGLE CALENDAR OAUTH SETUP =====
+const googleOAuthClient = new google.auth.OAuth2(
+  process.env.GOOGLE_CLIENT_ID,
+  process.env.GOOGLE_CLIENT_SECRET,
+  process.env.GOOGLE_REDIRECT_URI
+);
+
 // ===== HELPERS =====
 const deleteFromS3 = async (key) => {
   try {
-    await s3.send(
-      new DeleteObjectCommand({
-        Bucket: process.env.AWS_BUCKET_NAME,
-        Key: key,
-      })
-    );
+    await s3.send(new DeleteObjectCommand({ Bucket: process.env.AWS_BUCKET_NAME, Key: key }));
   } catch (err) {
     console.log("Failed to delete S3 file:", err);
   }
@@ -144,8 +137,7 @@ const deleteUploadedFiles = async (files) => {
   }
 };
 
-const clean = (value) =>
-  typeof value === "string" ? value.trim() : value;
+const clean = (value) => (typeof value === "string" ? value.trim() : value);
 
 const parseArrayField = (value) => {
   if (Array.isArray(value)) return value;
@@ -160,64 +152,25 @@ const parseArrayField = (value) => {
 };
 
 const studentFields = [
-  "name",
-  "phone",
-  "gender",
-  "industry",
-  "major",
-  "desiredFutureCareer",
-  "currentJob",
-  "academicStanding",
-  "hearAboutService",
-  "otherInformation",
+  "name", "phone", "gender", "industry", "major", "desiredFutureCareer",
+  "currentJob", "academicStanding", "hearAboutService", "otherInformation",
 ];
 
 const requiredStudentFields = [
-  "name",
-  "phone",
-  "gender",
-  "industry",
-  "major",
-  "desiredFutureCareer",
-  "academicStanding",
-  "hearAboutService",
+  "name", "phone", "gender", "industry", "major",
+  "desiredFutureCareer", "academicStanding", "hearAboutService",
 ];
 
 const professionalFields = [
-  "name",
-  "phone",
-  "gender",
-  "experienceLevel",
-  "employer",
-  "jobTitle",
-  "industry",
-  "volunteeringFor",
-  "major",
-  "almaMater",
-  "mentorOpposingGender",
-  "countyState",
-  "hearAboutService",
-  "otherInformation",
-  "summary",
-  "photo",
-  "linkedin",
-  "website",
-  "github",
-  "services",
+  "name", "phone", "gender", "experienceLevel", "employer", "jobTitle",
+  "industry", "volunteeringFor", "major", "almaMater", "mentorOpposingGender",
+  "countyState", "hearAboutService", "otherInformation",
+  "summary", "photo", "linkedin", "website", "github", "services",
 ];
 
 const requiredProfessionalFields = [
-  "name",
-  "phone",
-  "gender",
-  "experienceLevel",
-  "employer",
-  "jobTitle",
-  "industry",
-  "volunteeringFor",
-  "mentorOpposingGender",
-  "countyState",
-  "hearAboutService",
+  "name", "phone", "gender", "experienceLevel", "employer", "jobTitle",
+  "industry", "volunteeringFor", "mentorOpposingGender", "countyState", "hearAboutService",
 ];
 
 const buildData = (body, allowedFields) => {
@@ -239,17 +192,14 @@ const buildData = (body, allowedFields) => {
 const findMissing = (data, requiredFields) =>
   requiredFields.filter((field) => {
     const value = data[field];
-
     if (!value) return true;
     if (typeof value === "string" && value.trim() === "") return true;
     if (Array.isArray(value) && value.length === 0) return true;
-
     return false;
   });
 
 const isValidUrl = (value) => {
   if (!value) return true;
-
   try {
     new URL(value);
     return true;
@@ -260,122 +210,139 @@ const isValidUrl = (value) => {
 
 const buildProfileData = (body, allowedFields) => {
   const data = buildData(body, allowedFields);
-
   data.aboutMe = clean(body.aboutMe || "");
-
   data.externalLinks = {
     linkedin: clean(body.linkedin || ""),
     website: clean(body.website || ""),
     github: clean(body.github || ""),
     other: clean(body.other || ""),
   };
-
   return data;
 };
 
 const validateProfile = (data, requiredFields) => {
   const missing = findMissing(data, requiredFields);
-
   if (missing.length > 0) {
     return `Missing required fields: ${missing.join(", ")}`;
   }
-
   if (data.aboutMe && data.aboutMe.length > 1000) {
     return "About must be 1000 characters or less.";
   }
+  if (!isValidUrl(data.externalLinks.linkedin)) return "LinkedIn URL is invalid.";
+  if (!isValidUrl(data.externalLinks.website)) return "Website URL is invalid.";
+  if (!isValidUrl(data.externalLinks.github)) return "GitHub URL is invalid.";
+  if (!isValidUrl(data.externalLinks.other)) return "Other link URL is invalid.";
+  return null;
+};
 
-  if (!isValidUrl(data.externalLinks.linkedin)) {
-    return "LinkedIn URL is invalid.";
+// ===== HELPERS for availability validation =====
+const timeToMinutes = (timeStr) => {
+  const [h, m] = timeStr.split(":").map(Number);
+  return h * 60 + m;
+};
+
+const validateBlock = (block) => {
+  if (!block.type || !["weekly", "specific"].includes(block.type)) {
+    return "Each block must have type 'weekly' or 'specific'.";
   }
-
-  if (!isValidUrl(data.externalLinks.website)) {
-    return "Website URL is invalid.";
+  if (block.type === "weekly" && (block.dayOfWeek === undefined || block.dayOfWeek < 0 || block.dayOfWeek > 6)) {
+    return "Weekly blocks need a valid dayOfWeek (0-6).";
   }
-
-  if (!isValidUrl(data.externalLinks.github)) {
-    return "GitHub URL is invalid.";
+  if (block.type === "specific" && !block.date) {
+    return "Specific blocks need a date (e.g. '2026-06-23').";
   }
-
-  if (!isValidUrl(data.externalLinks.other)) {
-    return "Other link URL is invalid.";
+  if (!block.start || !block.end) {
+    return "Each block needs a start and end time.";
   }
+  const startMinutes = timeToMinutes(block.start);
+  const endMinutes = timeToMinutes(block.end);
+  if (startMinutes >= endMinutes) {
+    return "Start time must be before end time.";
+  }
+  if (endMinutes - startMinutes < 60) {
+    return "Each block must be at least 1 hour long.";
+  }
+  return null;
+};
 
+const blocksOverlap = (a, b) => {
+  if (a.type !== b.type) return false;
+  if (a.type === "weekly" && a.dayOfWeek !== b.dayOfWeek) return false;
+  if (a.type === "specific" && a.date !== b.date) return false;
+
+  const aStart = timeToMinutes(a.start);
+  const aEnd = timeToMinutes(a.end);
+  const bStart = timeToMinutes(b.start);
+  const bEnd = timeToMinutes(b.end);
+
+  return aStart < bEnd && bStart < aEnd;
+};
+
+const validateBlocks = (blocks) => {
+  for (const block of blocks) {
+    const error = validateBlock(block);
+    if (error) return error;
+  }
+  for (let i = 0; i < blocks.length; i++) {
+    for (let j = i + 1; j < blocks.length; j++) {
+      if (blocksOverlap(blocks[i], blocks[j])) {
+        return "Availability blocks cannot overlap.";
+      }
+    }
+  }
   return null;
 };
 
 // ===== STUDENT FORM SUBMIT =====
-app.post(
-  "/api/student",
-  requireAuth,
-  upload.single("resume"),
-  async (req, res) => {
-    try {
-      const data = buildData(req.body, studentFields);
-      const missing = findMissing(data, requiredStudentFields);
+app.post("/api/student", requireAuth, upload.single("resume"), async (req, res) => {
+  try {
+    const data = buildData(req.body, studentFields);
+    const missing = findMissing(data, requiredStudentFields);
 
-      if (!req.file) {
-        missing.push("resume");
-      }
-
-      if (missing.length > 0) {
-        if (req.file) {
-          await deleteFromS3(req.file.key);
-        }
-
-        return res.status(400).json({
-          message: `Missing required fields: ${missing.join(", ")}`,
-        });
-      }
-
-      data.resume = req.file.location;
-      data.user = req.userId;
-      data.userId = req.userId;
-
-      const student = new Student(data);
-      await student.save();
-
-      await User.findByIdAndUpdate(req.userId, {
-        profileComplete: true,
-      });
-
-      res.status(201).json({
-        message: "Student submission saved!",
-        student,
-      });
-    } catch (err) {
-      console.log("STUDENT POST ERROR:", err);
-      res.status(500).json({
-        message: "Server error. Please try again later.",
-      });
+    if (!req.file) {
+      missing.push("resume");
     }
+
+    if (missing.length > 0) {
+      if (req.file) {
+        await deleteFromS3(req.file.key);
+      }
+      return res.status(400).json({ message: `Missing required fields: ${missing.join(", ")}` });
+    }
+
+    data.resume = req.file.location;
+    data.user = req.userId;
+    data.userId = req.userId;
+
+    const student = new Student(data);
+    await student.save();
+
+    await User.findByIdAndUpdate(req.userId, { profileComplete: true });
+
+    res.status(201).json({ message: "Student submission saved!", student });
+  } catch (err) {
+    console.log("STUDENT POST ERROR:", err);
+    res.status(500).json({ message: "Server error. Please try again later." });
   }
-);
+});
 
 // ===== GET STUDENT PROFILE =====
 app.get("/api/student/profile", requireAuth, async (req, res) => {
   try {
-    const student = await Student.findOne({
-      user: req.userId,
-    }).populate("user", "email role");
+    const student = await Student.findOne({ user: req.userId }).populate("user", "email role");
 
     if (!student) {
-      return res.status(404).json({
-        message: "Student profile not found.",
-      });
+      return res.status(404).json({ message: "Student profile not found." });
     }
 
     const profile = student.toObject();
-    profile.profilePicture = await getSignedFileUrl(
-      profile.profilePicture
-    );
+    profile.profilePicture = await getSignedFileUrl(profile.profilePicture);
     profile.resume = await getSignedFileUrl(profile.resume);
 
     res.json({ profile });
   } catch (err) {
     console.log("GET STUDENT PROFILE ERROR:", err);
-    res.status(500).json({
-      message: "Server error. Please try again later.",
-    });
+    res.status(500).json({ message: "Server error. Please try again later." });
   }
 });
 
@@ -389,14 +356,10 @@ app.put(
   ]),
   async (req, res) => {
     try {
-      const student = await Student.findOne({
-        user: req.userId,
-      });
+      const student = await Student.findOne({ user: req.userId });
 
       if (!student) {
-        return res.status(404).json({
-          message: "Student profile not found.",
-        });
+        return res.status(404).json({ message: "Student profile not found." });
       }
 
       const data = buildProfileData(req.body, studentFields);
@@ -407,10 +370,7 @@ app.put(
         }
       }
 
-      const error = validateProfile(
-        data,
-        requiredStudentFields
-      );
+      const error = validateProfile(data, requiredStudentFields);
 
       if (error) {
         await deleteUploadedFiles(req.files);
@@ -418,10 +378,8 @@ app.put(
       }
 
       if (req.files?.profilePicture?.[0]) {
-        data.profilePicture =
-          req.files.profilePicture[0].location;
+        data.profilePicture = req.files.profilePicture[0].location;
       }
-
       if (req.files?.resume?.[0]) {
         data.resume = req.files.resume[0].location;
       }
@@ -430,108 +388,69 @@ app.put(
       await student.save();
 
       const profile = student.toObject();
-      profile.profilePicture = await getSignedFileUrl(
-        profile.profilePicture
-      );
+      profile.profilePicture = await getSignedFileUrl(profile.profilePicture);
       profile.resume = await getSignedFileUrl(profile.resume);
 
-      res.json({
-        message: "Student profile updated successfully.",
-        profile,
-      });
+      res.json({ message: "Student profile updated successfully.", profile });
     } catch (err) {
       console.log("UPDATE STUDENT PROFILE ERROR:", err);
-      res.status(500).json({
-        message: "Server error. Please try again later.",
-      });
+      res.status(500).json({ message: "Server error. Please try again later." });
     }
   }
 );
 
 // ===== PROFESSIONAL FORM SUBMIT =====
-app.post(
-  "/api/professional",
-  requireAuth,
-  upload.single("resume"),
-  async (req, res) => {
-    try {
-      const data = buildData(req.body, professionalFields);
-      const missing = findMissing(
-        data,
-        requiredProfessionalFields
-      );
+app.post("/api/professional", requireAuth, upload.single("resume"), async (req, res) => {
+  try {
+    const data = buildData(req.body, professionalFields);
+    const missing = findMissing(data, requiredProfessionalFields);
 
-      if (!req.file) {
-        missing.push("resume");
-      }
-
-      if (missing.length > 0) {
-        if (req.file) {
-          await deleteFromS3(req.file.key);
-        }
-
-        return res.status(400).json({
-          message: `Missing required fields: ${missing.join(", ")}`,
-        });
-      }
-
-      data.resume = req.file.location;
-      data.user = req.userId;
-      data.userId = req.userId;
-
-      const professional = new Professional(data);
-      await professional.save();
-
-      await User.findByIdAndUpdate(req.userId, {
-        profileComplete: true,
-      });
-
-      res.status(201).json({
-        message: "Professional submission saved!",
-        professional,
-      });
-    } catch (err) {
-      console.log("PROFESSIONAL POST ERROR:", err);
-      res.status(500).json({
-        message: "Server error. Please try again later.",
-      });
+    if (!req.file) {
+      missing.push("resume");
     }
+
+    if (missing.length > 0) {
+      if (req.file) {
+        await deleteFromS3(req.file.key);
+      }
+      return res.status(400).json({ message: `Missing required fields: ${missing.join(", ")}` });
+    }
+
+    data.resume = req.file.location;
+    data.user = req.userId;
+    data.userId = req.userId;
+
+    const professional = new Professional(data);
+    await professional.save();
+
+    await User.findByIdAndUpdate(req.userId, { profileComplete: true });
+
+    res.status(201).json({ message: "Professional submission saved!", professional });
+  } catch (err) {
+    console.log("PROFESSIONAL POST ERROR:", err);
+    res.status(500).json({ message: "Server error. Please try again later." });
   }
-);
+});
 
 // ===== GET PROFESSIONAL PROFILE =====
-app.get(
-  "/api/professional/profile",
-  requireAuth,
-  async (req, res) => {
-    try {
-      const professional = await Professional.findOne({
-        user: req.userId,
-      }).populate("user", "email role");
+app.get("/api/professional/profile", requireAuth, async (req, res) => {
+  try {
+    const professional = await Professional.findOne({ user: req.userId }).populate("user", "email role");
 
-      if (!professional) {
-        return res.status(404).json({
-          message: "Professional profile not found.",
-        });
-      }
-
-      const profile = professional.toObject();
-      profile.profilePicture = await getSignedFileUrl(
-        profile.profilePicture
-      );
-      profile.resume = await getSignedFileUrl(
-        profile.resume
-      );
-
-      res.json({ profile });
-    } catch (err) {
-      console.log("GET PROFESSIONAL PROFILE ERROR:", err);
-      res.status(500).json({
-        message: "Server error. Please try again later.",
-      });
+    if (!professional) {
+      return res.status(404).json({ message: "Professional profile not found." });
     }
+
+    const profile = professional.toObject();
+    profile.profilePicture = await getSignedFileUrl(profile.profilePicture);
+    profile.resume = await getSignedFileUrl(profile.resume);
+
+    res.json({ profile });
+  } catch (err) {
+    console.log("GET PROFESSIONAL PROFILE ERROR:", err);
+    res.status(500).json({ message: "Server error. Please try again later." });
   }
-);
+});
 
 // ===== UPDATE PROFESSIONAL PROFILE =====
 app.put(
@@ -543,20 +462,13 @@ app.put(
   ]),
   async (req, res) => {
     try {
-      const professional = await Professional.findOne({
-        user: req.userId,
-      });
+      const professional = await Professional.findOne({ user: req.userId });
 
       if (!professional) {
-        return res.status(404).json({
-          message: "Professional profile not found.",
-        });
+        return res.status(404).json({ message: "Professional profile not found." });
       }
 
-      const data = buildProfileData(
-        req.body,
-        professionalFields
-      );
+      const data = buildProfileData(req.body, professionalFields);
 
       data.volunteeringFor =
         req.body.volunteeringFor !== undefined
@@ -573,52 +485,31 @@ app.put(
         }
       }
 
-      const error = validateProfile(
-        data,
-        requiredProfessionalFields
-      );
+      const error = validateProfile(data, requiredProfessionalFields);
 
       if (error) {
         await deleteUploadedFiles(req.files);
-        return res.status(400).json({
-          message: error,
-        });
+        return res.status(400).json({ message: error });
       }
 
       if (req.files?.profilePicture?.[0]) {
-        data.profilePicture =
-          req.files.profilePicture[0].location;
+        data.profilePicture = req.files.profilePicture[0].location;
       }
-
       if (req.files?.resume?.[0]) {
-        data.resume =
-          req.files.resume[0].location;
+        data.resume = req.files.resume[0].location;
       }
 
       Object.assign(professional, data);
       await professional.save();
 
       const profile = professional.toObject();
-      profile.profilePicture = await getSignedFileUrl(
-        profile.profilePicture
-      );
-      profile.resume = await getSignedFileUrl(
-        profile.resume
-      );
+      profile.profilePicture = await getSignedFileUrl(profile.profilePicture);
+      profile.resume = await getSignedFileUrl(profile.resume);
 
-      res.json({
-        message:
-          "Professional profile updated successfully.",
-        profile,
-      });
+      res.json({ message: "Professional profile updated successfully.", profile });
     } catch (err) {
-      console.log(
-        "UPDATE PROFESSIONAL PROFILE ERROR:",
-        err
-      );
-      res.status(500).json({
-        message: "Server error. Please try again later.",
-      });
+      console.log("UPDATE PROFESSIONAL PROFILE ERROR:", err);
+      res.status(500).json({ message: "Server error. Please try again later." });
     }
   }
 );
@@ -626,16 +517,8 @@ app.put(
 // ===== GET PROFESSIONALS =====
 app.get("/api/professionals", async (req, res) => {
   try {
-    const page = Math.max(
-      parseInt(req.query.page, 10) || 1,
-      1
-    );
-
-    const limit = Math.max(
-      parseInt(req.query.limit, 10) || 12,
-      1
-    );
-
+    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const limit = Math.max(parseInt(req.query.limit, 10) || 12, 1);
     const { industry, services } = req.query;
 
     const filter = {};
@@ -645,86 +528,47 @@ app.get("/api/professionals", async (req, res) => {
     }
 
     if (services) {
-      const serviceList = services
-        .split(",")
-        .map((service) => service.trim())
-        .filter(Boolean);
-
+      const serviceList = services.split(",").map((service) => service.trim()).filter(Boolean);
       if (serviceList.length > 0) {
-        filter.services = {
-          $in: serviceList,
-        };
+        filter.services = { $in: serviceList };
       }
     }
 
-    const allMatching = await Professional.find(
-      filter
-    ).sort({
-      createdAt: -1,
-    });
+    const allMatching = await Professional.find(filter).sort({ createdAt: -1 });
 
     const now = new Date();
-
-    const oneWeekAgo = new Date(
-      now.getTime() - 7 * 24 * 60 * 60 * 1000
-    );
-
-    const oneMonthAgo = new Date(
-      now.getTime() - 30 * 24 * 60 * 60 * 1000
-    );
+    const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const oneMonthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
     const visibleProfessionals = [];
 
     for (const professional of allMatching) {
-      const meetingsLastWeek =
-        await Meeting.countDocuments({
-          professional: professional._id,
-          status: {
-            $in: ["scheduled", "completed"],
-          },
-          date: {
-            $gte: oneWeekAgo,
-          },
-        });
+      const meetingsLastWeek = await Meeting.countDocuments({
+        professional: professional._id,
+        status: { $in: ["scheduled", "completed"] },
+        date: { $gte: oneWeekAgo },
+      });
 
-      const meetingsLastMonth =
-        await Meeting.countDocuments({
-          professional: professional._id,
-          status: {
-            $in: ["scheduled", "completed"],
-          },
-          date: {
-            $gte: oneMonthAgo,
-          },
-        });
+      const meetingsLastMonth = await Meeting.countDocuments({
+        professional: professional._id,
+        status: { $in: ["scheduled", "completed"] },
+        date: { $gte: oneMonthAgo },
+      });
 
-      const mostRecentMeeting =
-        await Meeting.findOne({
-          professional: professional._id,
-          status: {
-            $in: ["scheduled", "completed"],
-          },
-        }).sort({
-          date: -1,
-        });
+      const mostRecentMeeting = await Meeting.findOne({
+        professional: professional._id,
+        status: { $in: ["scheduled", "completed"] },
+      }).sort({ date: -1 });
 
       let isHidden = false;
 
       if (mostRecentMeeting) {
         const daysSinceLastMeeting =
-          (now.getTime() -
-            mostRecentMeeting.date.getTime()) /
-          (24 * 60 * 60 * 1000);
+          (now.getTime() - mostRecentMeeting.date.getTime()) / (24 * 60 * 60 * 1000);
 
-        if (
-          meetingsLastMonth >= 2 &&
-          daysSinceLastMeeting < 21
-        ) {
+        if (meetingsLastMonth >= 2 && daysSinceLastMeeting < 30) {
           isHidden = true;
-        } else if (
-          meetingsLastWeek >= 1 &&
-          daysSinceLastMeeting < 7
-        ) {
+        } else if (meetingsLastWeek >= 1 && daysSinceLastMeeting < 7) {
           isHidden = true;
         }
       }
@@ -735,154 +579,611 @@ app.get("/api/professionals", async (req, res) => {
     }
 
     const startIndex = (page - 1) * limit;
-
-    const paginatedResults =
-      visibleProfessionals.slice(
-        startIndex,
-        startIndex + limit
-      );
+    const paginatedResults = visibleProfessionals.slice(startIndex, startIndex + limit);
 
     const cardData = await Promise.all(
-      paginatedResults.map(
-        async (professional) => ({
-          id: professional._id,
-          name: professional.name,
-          jobTitle: professional.jobTitle,
-          summary: professional.summary,
-
-          photo: await getSignedFileUrl(
-            professional.photo ||
-              professional.profilePicture
-          ),
-
-          linkedin: professional.linkedin,
-          website: professional.website,
-          github: professional.github,
-          industry: professional.industry,
-          services: professional.services,
-        })
-      )
+      paginatedResults.map(async (professional) => ({
+        id: professional._id,
+        name: professional.name,
+        jobTitle: professional.jobTitle,
+        summary: professional.summary,
+        photo: await getSignedFileUrl(professional.photo || professional.profilePicture),
+        linkedin: professional.linkedin,
+        website: professional.website,
+        github: professional.github,
+        industry: professional.industry,
+        services: professional.services,
+      }))
     );
 
     res.json({
       professionals: cardData,
       currentPage: page,
-      totalPages: Math.ceil(
-        visibleProfessionals.length / limit
-      ),
+      totalPages: Math.ceil(visibleProfessionals.length / limit),
       totalResults: visibleProfessionals.length,
     });
   } catch (err) {
     console.log("GET PROFESSIONALS ERROR:", err);
-
-    res.status(500).json({
-      message:
-        "Server error. Please try again later.",
-    });
+    res.status(500).json({ message: "Server error. Please try again later." });
   }
 });
 
 // ===== DELETE PROFESSIONAL =====
-// This route is protected because it deletes database records.
-app.delete(
-  "/api/professional/:id",
-  requireAuth,
-  async (req, res) => {
-    try {
-      const deleted =
-        await Professional.findByIdAndDelete(
-          req.params.id
-        );
+app.delete("/api/professional/:id", requireAuth, async (req, res) => {
+  try {
+    const deleted = await Professional.findByIdAndDelete(req.params.id);
 
-      if (!deleted) {
-        return res.status(404).json({
-          message: "Professional not found.",
-        });
-      }
-
-      res.json({
-        message: "Professional deleted.",
-        deleted,
-      });
-    } catch (err) {
-      console.log(
-        "DELETE PROFESSIONAL ERROR:",
-        err
-      );
-
-      res.status(500).json({
-        message:
-          "Server error. Please try again later.",
-      });
+    if (!deleted) {
+      return res.status(404).json({ message: "Professional not found." });
     }
+
+    res.json({ message: "Professional deleted.", deleted });
+  } catch (err) {
+    console.log("DELETE PROFESSIONAL ERROR:", err);
+    res.status(500).json({ message: "Server error. Please try again later." });
   }
-);
+});
 
 // ===== PATCH PROFESSIONAL =====
-// This route is protected because it changes database records.
-app.patch(
-  "/api/professional/:id",
-  requireAuth,
-  async (req, res) => {
-    try {
-      const allowedUpdates = [
-        "name",
-        "industry",
-        "summary",
-        "photo",
-        "linkedin",
-        "website",
-        "github",
-        "services",
-      ];
+app.patch("/api/professional/:id", requireAuth, async (req, res) => {
+  try {
+    const allowedUpdates = ["name", "industry", "summary", "photo", "linkedin", "website", "github", "services"];
+    const updates = {};
 
-      const updates = {};
-
-      for (const field of allowedUpdates) {
-        if (req.body[field] !== undefined) {
-          updates[field] =
-            field === "services"
-              ? parseArrayField(req.body[field])
-              : clean(req.body[field]);
-        }
+    for (const field of allowedUpdates) {
+      if (req.body[field] !== undefined) {
+        updates[field] = field === "services" ? parseArrayField(req.body[field]) : clean(req.body[field]);
       }
+    }
 
-      const updated =
-        await Professional.findByIdAndUpdate(
-          req.params.id,
-          updates,
-          {
-            new: true,
-            runValidators: true,
-          }
-        );
+    const updated = await Professional.findByIdAndUpdate(req.params.id, updates, {
+      new: true,
+      runValidators: true,
+    });
 
-      if (!updated) {
-        return res.status(404).json({
-          message: "Professional not found.",
-        });
-      }
+    if (!updated) {
+      return res.status(404).json({ message: "Professional not found." });
+    }
 
-      res.json({
-        message: "Professional updated.",
-        professional: updated,
-      });
-    } catch (err) {
-      console.log(
-        "PATCH PROFESSIONAL ERROR:",
-        err
-      );
+    res.json({ message: "Professional updated.", professional: updated });
+  } catch (err) {
+    console.log("PATCH PROFESSIONAL ERROR:", err);
+    res.status(500).json({ message: "Server error. Please try again later." });
+  }
+});
 
-      res.status(500).json({
-        message:
-          "Server error. Please try again later.",
+// ===== GET /api/availability — get the logged-in user's availability =====
+app.get("/api/availability", requireAuth, async (req, res) => {
+  try {
+    const availability = await Availability.findOne({ userId: req.userId });
+    if (!availability) {
+      return res.status(404).json({ message: "No availability set yet." });
+    }
+    res.json({ availability });
+  } catch (err) {
+    console.log("GET AVAILABILITY ERROR:", err);
+    res.status(500).json({ message: "Server error. Please try again later." });
+  }
+});
+
+// ===== POST /api/availability — create the logged-in user's availability (first time) =====
+app.post("/api/availability", requireAuth, async (req, res) => {
+  try {
+    const user = await User.findById(req.userId);
+    if (!user || user.role !== "professional") {
+      return res.status(403).json({ message: "Only professionals can manage availability." });
+    }
+
+    const { timezone, availability } = req.body;
+
+    if (!timezone) {
+      return res.status(400).json({ message: "Timezone is required." });
+    }
+    if (!Array.isArray(availability)) {
+      return res.status(400).json({ message: "Availability must be an array of blocks." });
+    }
+
+    const validationError = validateBlocks(availability);
+    if (validationError) {
+      return res.status(400).json({ message: validationError });
+    }
+
+    const existing = await Availability.findOne({ userId: req.userId });
+    if (existing) {
+      return res.status(400).json({ message: "Availability already exists. Use PUT to update it." });
+    }
+
+    const created = await Availability.create({
+      userId: req.userId,
+      timezone,
+      availability,
+    });
+
+    res.status(201).json({ message: "Availability created.", availability: created });
+  } catch (err) {
+    console.log("POST AVAILABILITY ERROR:", err);
+    res.status(500).json({ message: "Server error. Please try again later." });
+  }
+});
+
+// ===== PUT /api/availability — update the logged-in user's availability =====
+app.put("/api/availability", requireAuth, async (req, res) => {
+  try {
+    const user = await User.findById(req.userId);
+    if (!user || user.role !== "professional") {
+      return res.status(403).json({ message: "Only professionals can manage availability." });
+    }
+
+    const { timezone, availability } = req.body;
+
+    if (!Array.isArray(availability)) {
+      return res.status(400).json({ message: "Availability must be an array of blocks." });
+    }
+
+    const validationError = validateBlocks(availability);
+    if (validationError) {
+      return res.status(400).json({ message: validationError });
+    }
+
+    const updated = await Availability.findOneAndUpdate(
+      { userId: req.userId },
+      { timezone, availability, updatedAt: new Date() },
+      { new: true, upsert: true }
+    );
+
+    res.json({ message: "Availability updated.", availability: updated });
+  } catch (err) {
+    console.log("PUT AVAILABILITY ERROR:", err);
+    res.status(500).json({ message: "Server error. Please try again later." });
+  }
+});
+
+// ===== DELETE /api/availability — clear the logged-in user's availability =====
+app.delete("/api/availability", requireAuth, async (req, res) => {
+  try {
+    const user = await User.findById(req.userId);
+    if (!user || user.role !== "professional") {
+      return res.status(403).json({ message: "Only professionals can manage availability." });
+    }
+
+    const deleted = await Availability.findOneAndDelete({ userId: req.userId });
+    if (!deleted) {
+      return res.status(404).json({ message: "No availability found to delete." });
+    }
+    res.json({ message: "Availability deleted." });
+  } catch (err) {
+    console.log("DELETE AVAILABILITY ERROR:", err);
+    res.status(500).json({ message: "Server error. Please try again later." });
+  }
+});
+
+// ===== POST /api/meetings — book a meeting with a professional =====
+app.post("/api/meetings", requireAuth, async (req, res) => {
+  try {
+    const { professionalId, date } = req.body;
+
+    if (!professionalId || !date) {
+      return res.status(400).json({ message: "professionalId and date are required." });
+    }
+
+    const meetingDate = new Date(date);
+    if (isNaN(meetingDate.getTime())) {
+      return res.status(400).json({ message: "Invalid date." });
+    }
+
+    const student = await Student.findOne({ user: req.userId });
+    if (!student) {
+      return res.status(404).json({ message: "Student profile not found." });
+    }
+
+    const professional = await Professional.findById(professionalId);
+    if (!professional) {
+      return res.status(404).json({ message: "Professional not found." });
+    }
+
+    const startOfWeek = new Date(meetingDate);
+    startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay());
+    startOfWeek.setHours(0, 0, 0, 0);
+    const endOfWeek = new Date(startOfWeek);
+    endOfWeek.setDate(endOfWeek.getDate() + 7);
+
+    const meetingThisWeek = await Meeting.findOne({
+      professional: professional._id,
+      status: { $in: ["scheduled", "completed"] },
+      date: { $gte: startOfWeek, $lt: endOfWeek },
+    });
+
+    if (meetingThisWeek) {
+      return res.status(400).json({
+        message: "This professional already has a meeting booked this week.",
       });
     }
+
+    // enforce: student can only book one meeting per week (with any professional)
+    const studentMeetingThisWeek = await Meeting.findOne({
+      student: student._id,
+      status: { $in: ["scheduled", "completed"] },
+      date: { $gte: startOfWeek, $lt: endOfWeek },
+    });
+
+    if (studentMeetingThisWeek) {
+      return res.status(400).json({
+        message: "You already have a meeting booked this week.",
+      });
+    }
+
+    const meeting = await Meeting.create({
+      professional: professional._id,
+      student: student._id,
+      date: meetingDate,
+      status: "scheduled",
+    });
+
+    res.status(201).json({ message: "Meeting booked!", meeting });
+  } catch (err) {
+    console.log("BOOK MEETING ERROR:", err);
+    res.status(500).json({ message: "Server error. Please try again later." });
   }
-);
+});
+
+// ===== GET /api/availability/:professionalUserId — public view of a professional's availability + booked slots =====
+app.get("/api/availability/:professionalUserId", async (req, res) => {
+  try {
+    const availability = await Availability.findOne({ userId: req.params.professionalUserId });
+    if (!availability) {
+      return res.status(404).json({ message: "No availability set for this professional." });
+    }
+
+    const professional = await Professional.findOne({ user: req.params.professionalUserId });
+    if (!professional) {
+      return res.status(404).json({ message: "Professional not found." });
+    }
+
+    // find their upcoming booked meetings so we know which slots are taken
+    const now = new Date();
+    const bookedMeetings = await Meeting.find({
+      professional: professional._id,
+      status: { $in: ["scheduled", "completed"] },
+      date: { $gte: now },
+    }).select("date -_id");
+
+    res.json({
+      timezone: availability.timezone,
+      availability: availability.availability,
+      bookedSlots: bookedMeetings.map((m) => m.date),
+    });
+  } catch (err) {
+    console.log("GET PUBLIC AVAILABILITY ERROR:", err);
+    res.status(500).json({ message: "Server error. Please try again later." });
+  }
+});
+
+// ===== GET /api/calendar/google/connect — redirect user to Google's login/consent screen =====
+app.get("/api/calendar/google/connect", requireAuth, (req, res) => {
+  const authUrl = googleOAuthClient.generateAuthUrl({
+    access_type: "offline", // needed to get a refresh token
+    scope: ["https://www.googleapis.com/auth/calendar.readonly"],
+    state: req.userId, // pass the user's ID through so we know who's connecting when Google sends them back
+    prompt: "consent",
+  });
+
+  res.json({ url: authUrl });
+});
+
+// ===== GET /api/calendar/google/callback — Google redirects here after the user approves access =====
+app.get("/api/calendar/google/callback", async (req, res) => {
+  try {
+    const { code, state } = req.query;
+    const userId = state;
+
+    if (!code || !userId) {
+      return res.status(400).json({ message: "Missing authorization code or user." });
+    }
+
+    const { tokens } = await googleOAuthClient.getToken(code);
+
+    if (!tokens.access_token || !tokens.refresh_token) {
+      return res.status(400).json({
+        message: "Failed to get calendar access. Please try connecting again.",
+      });
+    }
+
+    await CalendarConnection.findOneAndUpdate(
+      { userId, provider: "google" },
+      {
+        userId,
+        provider: "google",
+        accessToken: encryptToken(tokens.access_token),
+        refreshToken: encryptToken(tokens.refresh_token),
+        calendarId: "primary",
+        lastSynced: new Date(),
+        syncStatus: "ok",
+      },
+      { upsert: true, new: true }
+    );
+
+    res.send("Google Calendar connected! You can close this tab.");
+  } catch (err) {
+    console.log("GOOGLE CALLBACK ERROR:", err);
+    res.status(500).json({ message: "Failed to connect Google Calendar. Please try again." });
+  }
+});
+
+// ===== GET /api/calendar/google/busy — fetch busy time blocks from the connected Google Calendar =====
+app.get("/api/calendar/google/busy", requireAuth, async (req, res) => {
+  try {
+    const connection = await CalendarConnection.findOne({ userId: req.userId, provider: "google" });
+
+    if (!connection) {
+      return res.status(404).json({ message: "No Google Calendar connected." });
+    }
+
+    // fresh client per request so simultaneous users don't overwrite each other's credentials
+    const userClient = new google.auth.OAuth2(
+      process.env.GOOGLE_CLIENT_ID,
+      process.env.GOOGLE_CLIENT_SECRET,
+      process.env.GOOGLE_REDIRECT_URI
+    );
+
+    userClient.setCredentials({
+      access_token: decryptToken(connection.accessToken),
+      refresh_token: decryptToken(connection.refreshToken),
+    });
+
+    // googleapis refreshes the access token behind the scenes when it's expired —
+    // this event is how we find out, so we can persist the new one back to the DB.
+    // Without this, the connection silently breaks again ~1hr after every refresh.
+    userClient.on("tokens", async (tokens) => {
+      try {
+        const update = {};
+        if (tokens.access_token) update.accessToken = encryptToken(tokens.access_token);
+        if (tokens.refresh_token) update.refreshToken = encryptToken(tokens.refresh_token);
+        if (Object.keys(update).length > 0) {
+          await CalendarConnection.findByIdAndUpdate(connection._id, update);
+        }
+      } catch (refreshSaveErr) {
+        console.log("GOOGLE TOKEN REFRESH SAVE ERROR:", refreshSaveErr);
+      }
+    });
+
+    const calendar = google.calendar({ version: "v3", auth: userClient });
+
+    const now = new Date();
+    const oneMonthOut = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+
+    const response = await calendar.freebusy.query({
+      requestBody: {
+        timeMin: now.toISOString(),
+        timeMax: oneMonthOut.toISOString(),
+        items: [{ id: connection.calendarId }],
+      },
+    });
+
+    const busyTimes = response.data.calendars[connection.calendarId].busy;
+
+    await CalendarConnection.findByIdAndUpdate(connection._id, {
+      lastSynced: new Date(),
+      syncStatus: "ok",
+    });
+
+    res.json({ busy: busyTimes });
+  } catch (err) {
+    console.log("GOOGLE BUSY FETCH ERROR:", err);
+
+    // mark the connection as failed/expired so the user knows to reconnect
+    await CalendarConnection.findOneAndUpdate(
+      { userId: req.userId, provider: "google" },
+      { syncStatus: "failed" }
+    );
+
+    res.status(500).json({
+      message: "Failed to sync with Google Calendar. Your connection may have expired — please reconnect.",
+    });
+  }
+});
+
+// ===== OUTLOOK (MICROSOFT) CALENDAR OAUTH =====
+// using /consumers/ (not /common/) because this app is registered for Personal Microsoft accounts only
+const MS_AUTH_BASE = "https://login.microsoftonline.com/consumers/oauth2/v2.0";
+const MS_SCOPES = "offline_access https://graph.microsoft.com/Calendars.Read";
+
+// exchanges a stored refresh_token for a new access_token when the old one has expired.
+// Microsoft may also rotate the refresh_token itself, so we return both.
+async function refreshOutlookToken(refreshToken) {
+  const tokenRes = await fetch(`${MS_AUTH_BASE}/token`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: process.env.MS_CLIENT_ID,
+      client_secret: process.env.MS_CLIENT_SECRET,
+      grant_type: "refresh_token",
+      refresh_token: refreshToken,
+      scope: MS_SCOPES,
+    }),
+  });
+
+  const tokens = await tokenRes.json();
+
+  if (!tokenRes.ok || !tokens.access_token) {
+    console.log("OUTLOOK TOKEN REFRESH ERROR:", tokens);
+    throw new Error("Failed to refresh Outlook access token");
+  }
+
+  return tokens;
+}
+
+// ===== GET /api/calendar/outlook/connect — redirect user to Microsoft's login/consent screen =====
+app.get("/api/calendar/outlook/connect", requireAuth, (req, res) => {
+  const params = new URLSearchParams({
+    client_id: process.env.MS_CLIENT_ID,
+    response_type: "code",
+    redirect_uri: process.env.MS_REDIRECT_URI,
+    response_mode: "query",
+    scope: MS_SCOPES, // offline_access is what gets us a refresh token
+    state: req.userId, // pass the user's ID through so we know who's connecting on the way back
+    prompt: "consent",
+  });
+
+  res.json({ url: `${MS_AUTH_BASE}/authorize?${params.toString()}` });
+});
+
+// ===== GET /api/calendar/outlook/callback — Microsoft redirects here after the user approves access =====
+app.get("/api/calendar/outlook/callback", async (req, res) => {
+  try {
+    const { code, state, error, error_description } = req.query;
+    const userId = state;
+
+    if (error) {
+      console.log("OUTLOOK CONSENT ERROR:", error, error_description);
+      return res.status(400).json({ message: "Microsoft sign-in was cancelled or failed. Please try again." });
+    }
+    if (!code || !userId) {
+      return res.status(400).json({ message: "Missing authorization code or user." });
+    }
+
+    // exchange the code for tokens
+    const tokenRes = await fetch(`${MS_AUTH_BASE}/token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: process.env.MS_CLIENT_ID,
+        client_secret: process.env.MS_CLIENT_SECRET,
+        code,
+        grant_type: "authorization_code",
+        redirect_uri: process.env.MS_REDIRECT_URI,
+        scope: MS_SCOPES,
+      }),
+    });
+
+    const tokens = await tokenRes.json();
+
+    if (!tokenRes.ok || !tokens.access_token || !tokens.refresh_token) {
+      console.log("OUTLOOK TOKEN EXCHANGE ERROR:", tokens);
+      return res.status(400).json({
+        message: "Failed to get calendar access. Please try connecting again.",
+      });
+    }
+
+    await CalendarConnection.findOneAndUpdate(
+      { userId, provider: "outlook" },
+      {
+        userId,
+        provider: "outlook",
+        accessToken: encryptToken(tokens.access_token),
+        refreshToken: encryptToken(tokens.refresh_token),
+        calendarId: "primary",
+        lastSynced: new Date(),
+        syncStatus: "ok",
+      },
+      { upsert: true, new: true }
+    );
+
+    res.send("Outlook Calendar connected! You can close this tab.");
+  } catch (err) {
+    console.log("OUTLOOK CALLBACK ERROR:", err);
+    res.status(500).json({ message: "Failed to connect Outlook Calendar. Please try again." });
+  }
+});
+
+// ===== GET /api/calendar/outlook/busy — fetch busy time blocks from the connected Outlook Calendar =====
+app.get("/api/calendar/outlook/busy", requireAuth, async (req, res) => {
+  try {
+    const connection = await CalendarConnection.findOne({ userId: req.userId, provider: "outlook" });
+
+    if (!connection) {
+      return res.status(404).json({ message: "No Outlook Calendar connected." });
+    }
+
+    let accessToken = decryptToken(connection.accessToken);
+
+    const now = new Date();
+    const oneMonthOut = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+
+    const firstUrl = new URL("https://graph.microsoft.com/v1.0/me/calendarView");
+    firstUrl.searchParams.set("startDateTime", now.toISOString());
+    firstUrl.searchParams.set("endDateTime", oneMonthOut.toISOString());
+    firstUrl.searchParams.set("$select", "start,end,showAs");
+    firstUrl.searchParams.set("$top", "100");
+
+    // fetches one page from Graph using whatever access token is passed in
+    const fetchPage = (url, token) =>
+      fetch(url, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Prefer: 'outlook.timezone="UTC"', // return event times in UTC
+        },
+      });
+
+    // calendarView pages its results, so follow @odata.nextLink until we've got everything.
+    // If the access token has expired (401), refresh it once, persist the new tokens, and
+    // restart the paging loop from the top with the fresh token.
+    let events = [];
+    let nextUrl = firstUrl.toString();
+    let alreadyRefreshed = false;
+
+    while (nextUrl) {
+      let graphRes = await fetchPage(nextUrl, accessToken);
+
+      if (graphRes.status === 401 && !alreadyRefreshed) {
+        alreadyRefreshed = true;
+
+        const refreshedTokens = await refreshOutlookToken(decryptToken(connection.refreshToken));
+        accessToken = refreshedTokens.access_token;
+
+        await CalendarConnection.findByIdAndUpdate(connection._id, {
+          accessToken: encryptToken(refreshedTokens.access_token),
+          // Microsoft doesn't always issue a new refresh_token — keep the old one if so
+          ...(refreshedTokens.refresh_token && {
+            refreshToken: encryptToken(refreshedTokens.refresh_token),
+          }),
+        });
+
+        // start over from the first page with the fresh token
+        events = [];
+        nextUrl = firstUrl.toString();
+        continue;
+      }
+
+      const data = await graphRes.json();
+
+      if (!graphRes.ok) {
+        console.log("OUTLOOK GRAPH ERROR:", data);
+        throw new Error("Graph calendarView request failed");
+      }
+
+      events.push(...(data.value || []));
+      nextUrl = data["@odata.nextLink"] || null;
+    }
+
+    // match the shape of the Google busy response: [{ start, end }] in ISO UTC
+    const busyTimes = events
+      .filter((event) => event.showAs !== "free")
+      .map((event) => ({
+        start: new Date(event.start.dateTime + "Z").toISOString(),
+        end: new Date(event.end.dateTime + "Z").toISOString(),
+      }));
+
+    await CalendarConnection.findByIdAndUpdate(connection._id, {
+      lastSynced: new Date(),
+      syncStatus: "ok",
+    });
+
+    res.json({ busy: busyTimes });
+  } catch (err) {
+    console.log("OUTLOOK BUSY FETCH ERROR:", err);
+
+    // mark the connection as failed/expired so the user knows to reconnect
+    await CalendarConnection.findOneAndUpdate(
+      { userId: req.userId, provider: "outlook" },
+      { syncStatus: "failed" }
+    );
+
+    res.status(500).json({
+      message: "Failed to sync with Outlook Calendar. Your connection may have expired — please reconnect.",
+    });
+  }
+});
 
 app.listen(process.env.PORT, () => {
-  console.log(
-    `Server running on port ${process.env.PORT}`
-  );
+  console.log(`Server running on port ${process.env.PORT}`);
 });
