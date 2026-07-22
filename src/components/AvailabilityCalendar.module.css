@@ -1,0 +1,134 @@
+.page {
+    position: fixed;
+    inset: 0;
+    background: #ffffff;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    font-family: var(--font-brand);
+}
+
+.topBar {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 16px;
+    padding: 16px 24px;
+    background: var(--color-teal);
+}
+
+.syncBtn,
+.homeBtn {
+    padding: 10px 20px;
+    border-radius: 8px;
+    border: none;
+    font-weight: 700;
+    font-family: var(--font-brand);
+    cursor: pointer;
+}
+
+.syncBtn {
+    background: var(--color-navy-dark);
+    color: #fff;
+}
+
+.syncBtn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.homeBtn {
+    background: transparent;
+    color: #fff;
+    border: 1px solid #fff;
+}
+
+.gridWrap {
+    flex: 1;
+    overflow: auto;
+    padding: 16px 24px;
+    user-select: none;
+}
+
+.grid {
+    display: grid;
+    min-width: 600px;
+}
+
+.cornerCell {
+    position: sticky;
+    top: 0;
+    background: #fff;
+    z-index: 2;
+}
+
+.dayHeader {
+    position: sticky;
+    top: 0;
+    background: #fff;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 2px solid var(--brand-input-border);
+    font-weight: 700;
+    color: var(--color-navy-dark);
+    z-index: 2;
+}
+
+.dayHeaderLabel {
+    font-size: 12px;
+    letter-spacing: 0.5px;
+    color: var(--brand-text-muted);
+}
+
+.dayHeaderSub {
+    font-size: 18px;
+}
+
+.timeLabel {
+    font-size: 11px;
+    color: var(--brand-text-muted);
+    padding: 4px 8px 0 0;
+    text-align: right;
+    white-space: nowrap;
+}
+
+.slotCell {
+    border: 1px solid var(--brand-input-border);
+    height: 28px;
+    cursor: pointer;
+    background: #fff;
+}
+
+.slotCell:hover {
+    background: var(--color-grey-light);
+}
+
+.slotCellSelected {
+    background: var(--color-teal-light);
+}
+
+.slotCellBusy {
+    background: repeating-linear-gradient(45deg, #f2c1c1, #f2c1c1 6px, #e8a9a9 6px, #e8a9a9 12px);
+    cursor: not-allowed;
+}
+
+.footer {
+    padding: 16px 24px;
+    display: flex;
+    justify-content: center;
+    border-top: 1px solid var(--brand-input-border);
+}
+
+.saveBtn {
+    padding: 14px 40px;
+    border: none;
+    border-radius: 30px;
+    background: var(--brand-primary);
+    color: #fff;
+    font-weight: 700;
+    font-size: 15px;
+    font-family: var(--font-brand);
+    cursor: pointer;
+}
