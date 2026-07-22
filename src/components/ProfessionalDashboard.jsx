@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import Dashboard from "./Dashboard";
 import ProfessionalProfile from "./ProfessionalProfile";
+import AvailabilityModal from "./AvailabilityModal";
+import AvailabilityCalendar from "./AvailabilityCalendar";
 
 const PROFESSIONAL_NAV_LINKS = [
   { label: "Home" },
@@ -20,6 +22,8 @@ export default function ProfessionalDashboard({ userName = " " }) {
   const [activeView, setActiveView] = useState("home");
   const [profilePhoto, setProfilePhoto] = useState("");
   const [displayName, setDisplayName] = useState(userName);
+  const [availabilityStep, setAvailabilityStep] = useState(null);
+  const [availabilityData, setAvailabilityData] = useState(null);
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -37,39 +41,60 @@ export default function ProfessionalDashboard({ userName = " " }) {
           setDisplayName(body.profile.name);
         }
       })
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   const handleNavClick = (label) => {
     if (label === "Update Availability") {
-      setActiveView("availability");
+      setAvailabilityStep("form");
     } else if (label === "Home") {
       setActiveView("home");
     }
   };
 
+  const closeAvailabilityFlow = () => {
+    setAvailabilityStep(null);
+    setAvailabilityData(null);
+  };
+
+  if (availabilityStep === "calendar") {
+    return (
+      <AvailabilityCalendar
+        availability={availabilityData}
+        onClose={closeAvailabilityFlow}
+        userName={displayName}
+        profilePhoto={profilePhoto}
+      />
+    );
+  }
+
   return (
-    <Dashboard
-      userName={displayName}
-      userRole="Professional"
-      profilePhoto={profilePhoto}
-      navLinks={PROFESSIONAL_NAV_LINKS}
-      todoItems={PROFESSIONAL_TODO}
-      upcomingMeetings={UPCOMING_MEETINGS}
-      previousMeetings={PREVIOUS_MEETINGS}
-      onNavClick={handleNavClick}
-      onProfileClick={() => setActiveView("profile")}
-    >
-      {activeView === "availability" ? (
-        <div style={{ padding: "24px" }}>
-          <h1 style={{ color: "#0a7ea4", fontFamily: "Montserrat, sans-serif" }}>
-            Update Availability
-          </h1>
-          <p>Coming soon — this page is still being built.</p>
-        </div>
-      ) : activeView === "profile" ? (
-        <ProfessionalProfile onClose={() => setActiveView("home")} />
-      ) : null}
-    </Dashboard>
+    <>
+      <Dashboard
+        userName={displayName}
+        userRole="Professional"
+        profilePhoto={profilePhoto}
+        navLinks={PROFESSIONAL_NAV_LINKS}
+        todoItems={PROFESSIONAL_TODO}
+        upcomingMeetings={UPCOMING_MEETINGS}
+        previousMeetings={PREVIOUS_MEETINGS}
+        onNavClick={handleNavClick}
+        onProfileClick={() => setActiveView("profile")}
+      >
+        {activeView === "profile" ? (
+          <ProfessionalProfile onClose={() => setActiveView("home")} />
+        ) : null}
+      </Dashboard>
+
+      {availabilityStep === "form" && (
+        <AvailabilityModal
+          onClose={closeAvailabilityFlow}
+          onContinue={(data) => {
+            setAvailabilityData(data);
+            setAvailabilityStep("calendar");
+          }}
+        />
+      )}
+    </>
   );
 }
