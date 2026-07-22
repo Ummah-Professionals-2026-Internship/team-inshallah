@@ -930,6 +930,22 @@ app.get("/api/calendar/google/busy", requireAuth, async (req, res) => {
       refresh_token: decryptToken(connection.refreshToken),
     });
 
+    // googleapis refreshes the access token behind the scenes when it's expired —
+    // this event is how we find out, so we can persist the new one back to the DB.
+    // Without this, the connection silently breaks again ~1hr after every refresh.
+    userClient.on("tokens", async (tokens) => {
+      try {
+        const update = {};
+        if (tokens.access_token) update.accessToken = encryptToken(tokens.access_token);
+        if (tokens.refresh_token) update.refreshToken = encryptToken(tokens.refresh_token);
+        if (Object.keys(update).length > 0) {
+          await CalendarConnection.findByIdAndUpdate(connection._id, update);
+        }
+      } catch (refreshSaveErr) {
+        console.log("GOOGLE TOKEN REFRESH SAVE ERROR:", refreshSaveErr);
+      }
+    });
+
     const calendar = google.calendar({ version: "v3", auth: userClient });
 
     const now = new Date();
@@ -967,8 +983,34 @@ app.get("/api/calendar/google/busy", requireAuth, async (req, res) => {
 });
 
 // ===== OUTLOOK (MICROSOFT) CALENDAR OAUTH =====
+// using /consumers/ (not /common/) because this app is registered for Personal Microsoft accounts only
 const MS_AUTH_BASE = "https://login.microsoftonline.com/consumers/oauth2/v2.0";
 const MS_SCOPES = "offline_access https://graph.microsoft.com/Calendars.Read";
+
+// exchanges a stored refresh_token for a new access_token when the old one has expired.
+// Microsoft may also rotate the refresh_token itself, so we return both.
+async function refreshOutlookToken(refreshToken) {
+  const tokenRes = await fetch(`${MS_AUTH_BASE}/token`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: process.env.MS_CLIENT_ID,
+      client_secret: process.env.MS_CLIENT_SECRET,
+      grant_type: "refresh_token",
+      refresh_token: refreshToken,
+      scope: MS_SCOPES,
+    }),
+  });
+
+  const tokens = await tokenRes.json();
+
+  if (!tokenRes.ok || !tokens.access_token) {
+    console.log("OUTLOOK TOKEN REFRESH ERROR:", tokens);
+    throw new Error("Failed to refresh Outlook access token");
+  }
+
+  return tokens;
+}
 
 // ===== GET /api/calendar/outlook/connect — redirect user to Microsoft's login/consent screen =====
 app.get("/api/calendar/outlook/connect", requireAuth, (req, res) => {
@@ -1052,7 +1094,7 @@ app.get("/api/calendar/outlook/busy", requireAuth, async (req, res) => {
       return res.status(404).json({ message: "No Outlook Calendar connected." });
     }
 
-    const accessToken = decryptToken(connection.accessToken);
+    let accessToken = decryptToken(connection.accessToken);
 
     const now = new Date();
     const oneMonthOut = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
@@ -1063,17 +1105,44 @@ app.get("/api/calendar/outlook/busy", requireAuth, async (req, res) => {
     firstUrl.searchParams.set("$select", "start,end,showAs");
     firstUrl.searchParams.set("$top", "100");
 
-    // calendarView pages its results, so follow @odata.nextLink until we've got everything
-    const events = [];
-    let nextUrl = firstUrl.toString();
-
-    while (nextUrl) {
-      const graphRes = await fetch(nextUrl, {
+    // fetches one page from Graph using whatever access token is passed in
+    const fetchPage = (url, token) =>
+      fetch(url, {
         headers: {
-          Authorization: `Bearer ${accessToken}`,
+          Authorization: `Bearer ${token}`,
           Prefer: 'outlook.timezone="UTC"', // return event times in UTC
         },
       });
+
+    // calendarView pages its results, so follow @odata.nextLink until we've got everything.
+    // If the access token has expired (401), refresh it once, persist the new tokens, and
+    // restart the paging loop from the top with the fresh token.
+    let events = [];
+    let nextUrl = firstUrl.toString();
+    let alreadyRefreshed = false;
+
+    while (nextUrl) {
+      let graphRes = await fetchPage(nextUrl, accessToken);
+
+      if (graphRes.status === 401 && !alreadyRefreshed) {
+        alreadyRefreshed = true;
+
+        const refreshedTokens = await refreshOutlookToken(decryptToken(connection.refreshToken));
+        accessToken = refreshedTokens.access_token;
+
+        await CalendarConnection.findByIdAndUpdate(connection._id, {
+          accessToken: encryptToken(refreshedTokens.access_token),
+          // Microsoft doesn't always issue a new refresh_token — keep the old one if so
+          ...(refreshedTokens.refresh_token && {
+            refreshToken: encryptToken(refreshedTokens.refresh_token),
+          }),
+        });
+
+        // start over from the first page with the fresh token
+        events = [];
+        nextUrl = firstUrl.toString();
+        continue;
+      }
 
       const data = await graphRes.json();
 
