@@ -57,6 +57,17 @@ export default function ProfessionalDashboard({ userName = " " }) {
     setAvailabilityData(null);
   };
 
+  if (availabilityStep === "calendar") {
+    return (
+      <AvailabilityCalendar
+        availability={availabilityData}
+        onClose={closeAvailabilityFlow}
+        userName={displayName}
+        profilePhoto={profilePhoto}
+      />
+    );
+  }
+
   return (
     <>
       <Dashboard
@@ -82,13 +93,6 @@ export default function ProfessionalDashboard({ userName = " " }) {
             setAvailabilityData(data);
             setAvailabilityStep("calendar");
           }}
-        />
-      )}
-
-      {availabilityStep === "calendar" && (
-        <AvailabilityCalendar
-          availability={availabilityData}
-          onClose={closeAvailabilityFlow}
         />
       )}
     </>

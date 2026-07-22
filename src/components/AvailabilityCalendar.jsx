@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect, useMemo } from "react";
-import styles from "./AvailabilityCalendar.module.css";
 import Dashboard from "./Dashboard";
+import styles from "./AvailabilityCalendar.module.css";
 
 const SLOT_MINUTES = 30;
 const WEEKDAY_ORDER = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+
 const CALENDAR_NAV_LINKS = [
     { label: "Add Calendar" },
     { label: "Home" },
@@ -45,7 +46,7 @@ function buildDayColumns(availability) {
         .map((d) => ({ key: d, label: d.slice(0, 3), sublabel: "" }));
 }
 
-export default function AvailabilityScheduleGrid({ availability, onClose, onSave }) {
+export default function AvailabilityCalendar({ availability, onClose, onSave, userName, profilePhoto }) {
     const days = useMemo(() => buildDayColumns(availability), [availability]);
 
     const startMin = timeToMinutes(availability?.startTime || "09:00");
@@ -92,14 +93,7 @@ export default function AvailabilityScheduleGrid({ availability, onClose, onSave
         return () => window.removeEventListener("mouseup", stopDrag);
     }, []);
 
-    const handleCalendarNavClick = (label) => {
-        if (label === "Add Calendar") {
-            handleSyncCalendar();
-        } else if (label === "Home") {
-            onClose();
-        }
-    };
-
+    // connecting backend next week
     const handleSyncCalendar = async () => {
         setSyncing(true);
         try {
@@ -116,14 +110,13 @@ export default function AvailabilityScheduleGrid({ availability, onClose, onSave
                 setBusy(new Set(data.busySlots.map((b) => cellKey(b.dayKey, b.slot))));
             }
         } catch {
-            // backend route isn't built yet - safe to ignore for now
+            // connecting backend next week
         } finally {
             setSyncing(false);
         }
     };
 
-    // TODO backend: this endpoint doesn't exist yet either. Should accept
-    // the selected time blocks and persist them against the professional.
+    // connecting backend next week
     const handleSave = async () => {
         const blocks = Array.from(selected).map((key) => {
             const [dayKey, slot] = key.split("__");
@@ -144,23 +137,31 @@ export default function AvailabilityScheduleGrid({ availability, onClose, onSave
                 }),
             });
         } catch {
-            // backend route isn't built yet - safe to ignore for now
+            // connecting backend next week
         }
         onSave?.(blocks);
         onClose();
     };
 
-    return (
-        <div className={styles.page}>
-            <header className={styles.topBar}>
-                <button type="button" className={styles.syncBtn} onClick={handleSyncCalendar} disabled={syncing}>
-                    {syncing ? "Syncing..." : "Sync Calendar"}
-                </button>
-                <button type="button" className={styles.homeBtn} onClick={onClose}>
-                    Home
-                </button>
-            </header>
+    const handleCalendarNavClick = (label) => {
+        if (label === "Add Calendar") {
+            handleSyncCalendar();
+        } else if (label === "Home") {
+            onClose();
+        }
+    };
 
+    return (
+        <Dashboard
+            userName={userName}
+            userRole="Professional"
+            profilePhoto={profilePhoto}
+            navLinks={CALENDAR_NAV_LINKS}
+            onNavClick={handleCalendarNavClick}
+            todoItems={[]}
+            upcomingMeetings={[]}
+            previousMeetings={[]}
+        >
             <div className={styles.gridWrap}>
                 <div
                     className={styles.grid}
@@ -196,10 +197,11 @@ export default function AvailabilityScheduleGrid({ availability, onClose, onSave
             </div>
 
             <div className={styles.footer}>
+                {syncing && <span className={styles.syncingLabel}>Syncing calendar…</span>}
                 <button type="button" className={styles.saveBtn} onClick={handleSave}>
                     Save Availability
                 </button>
             </div>
-        </div>
+        </Dashboard>
     );
 }

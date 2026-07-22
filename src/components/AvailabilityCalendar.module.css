@@ -1,52 +1,5 @@
-.page {
-    position: fixed;
-    inset: 0;
-    background: #ffffff;
-    z-index: 1000;
-    display: flex;
-    flex-direction: column;
-    font-family: var(--font-brand);
-}
-
-.topBar {
-    display: flex;
-    justify-content: flex-end;
-    align-items: center;
-    gap: 16px;
-    padding: 16px 24px;
-    background: var(--color-teal);
-}
-
-.syncBtn,
-.homeBtn {
-    padding: 10px 20px;
-    border-radius: 8px;
-    border: none;
-    font-weight: 700;
-    font-family: var(--font-brand);
-    cursor: pointer;
-}
-
-.syncBtn {
-    background: var(--color-navy-dark);
-    color: #fff;
-}
-
-.syncBtn:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-}
-
-.homeBtn {
-    background: transparent;
-    color: #fff;
-    border: 1px solid #fff;
-}
-
 .gridWrap {
-    flex: 1;
     overflow: auto;
-    padding: 16px 24px;
     user-select: none;
 }
 
@@ -115,10 +68,16 @@
 }
 
 .footer {
-    padding: 16px 24px;
+    padding: 16px 0;
     display: flex;
+    align-items: center;
     justify-content: center;
-    border-top: 1px solid var(--brand-input-border);
+    gap: 16px;
+}
+
+.syncingLabel {
+    font-size: 13px;
+    color: var(--brand-text-muted);
 }
 
 .saveBtn {
