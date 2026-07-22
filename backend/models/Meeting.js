@@ -8,6 +8,24 @@ const meetingSchema = new mongoose.Schema(
     professional: { type: mongoose.Schema.Types.ObjectId, ref: "Professional", required: true },
     student: { type: mongoose.Schema.Types.ObjectId, ref: "Student", required: true },
     date: { type: Date, required: true }, // when the meeting is scheduled for
+    purpose: {
+      type: String,
+      enum: ["Résumé Review", "Mock Interview", "General Career Advice", ""],
+      default: "",
+    },
+    notes: { type: String, default: "" },
+    status: {
+      type: String,
+      enum: ["scheduled", "completed", "cancelled"],
+      default: "scheduled",
+    },
+    date: { type: Date, required: true }, // when the meeting is scheduled for
+    purpose: {
+      type: String,
+      enum: ["Résumé Review", "Mock Interview", "General Career Advice", ""],
+      default: "",
+    },
+    notes: { type: String, default: "" },
     status: {
       type: String,
       enum: ["scheduled", "completed", "cancelled"],

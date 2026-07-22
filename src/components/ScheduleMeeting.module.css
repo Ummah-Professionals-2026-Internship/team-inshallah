@@ -262,3 +262,177 @@
     font-size: 1.1875rem;
   }
 }
+
+.purposeBlock {
+  margin-bottom: 1rem;
+  text-align: left;
+}
+
+.purposeLabel {
+  font-size: 0.9375rem;
+  color: var(--up-black);
+  margin: 0 0 0.5rem;
+}
+
+.purposeOptions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.purposeOpt {
+  padding: 0.5rem 0.875rem;
+  border: 0.0625rem solid var(--up-blue);
+  border-radius: 1.25rem;
+  background: #ffffff;
+  color: var(--up-blue);
+  font-size: 0.875rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.purposeOpt:hover {
+  background: #e9f5f9;
+}
+
+.purposeOptSelected {
+  background: var(--up-blue);
+  color: #ffffff;
+}
+
+.notesInput {
+  width: 100%;
+  border: 0.0625rem solid #d6d9de;
+  border-radius: 0.5rem;
+  padding: 0.625rem;
+  font-size: 0.875rem;
+  font-family: inherit;
+  resize: vertical;
+  margin-bottom: 1rem;
+  box-sizing: border-box;
+}
+
+.notesInput:focus {
+  outline: none;
+  border-color: var(--up-blue);
+}
+
+.detailsView {
+  position: relative;
+  padding-top: 0.5rem;
+}
+
+.backBtn {
+  background: #ffffff;
+  border: none;
+  border-radius: 0.625rem;
+  box-shadow: 0 0.125rem 0.375rem rgba(0, 0, 0, 0.15);
+  width: 2.75rem;
+  height: 2.75rem;
+  font-size: 1.5rem;
+  color: var(--up-blue);
+  cursor: pointer;
+  margin-bottom: 1rem;
+}
+
+.backBtn:hover {
+  background: #f3f4f6;
+}
+
+.detailsTitle {
+  font-size: 2rem;
+  color: var(--up-black);
+  margin: 0 0 0.5rem;
+}
+
+.detailsSub {
+  font-size: 1.25rem;
+  color: var(--up-black);
+  margin: 0 0 1.25rem;
+}
+
+.infoRow {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--up-black);
+  margin-bottom: 0.75rem;
+}
+
+.infoIcon {
+  width: 1.5rem;
+  height: 1.5rem;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.detailsQuestion {
+  font-size: 1.0625rem;
+  color: var(--up-black);
+  margin: 1.5rem 0 0.75rem;
+}
+
+.serviceOptions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.serviceBox {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  border: 0.0625rem solid #d6d9de;
+  border-radius: 0.5rem;
+  background: #ffffff;
+  box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.08);
+  font-size: 0.875rem;
+  color: var(--up-black);
+  cursor: pointer;
+}
+
+.serviceBox input {
+  width: 1.125rem;
+  height: 1.125rem;
+  cursor: pointer;
+  accent-color: var(--up-blue);
+}
+
+.detailsNotes {
+  width: 100%;
+  border: 0.0625rem solid #d6d9de;
+  border-radius: 0.5rem;
+  padding: 0.75rem;
+  font-size: 0.9375rem;
+  font-family: inherit;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.detailsNotes:focus {
+  outline: none;
+  border-color: var(--up-blue);
+}
+
+.scheduleEventBtn {
+  margin-top: 1.5rem;
+  background: #2b7ba3;
+  color: #ffffff;
+  border: none;
+  border-radius: 2rem;
+  padding: 1rem 2.5rem;
+  font-size: 1.375rem;
+  cursor: pointer;
+}
+
+.scheduleEventBtn:hover {
+  background: #24688a;
+}
+
+.scheduleEventBtn:disabled {
+  background: #9bb8c2;
+  cursor: default;
+}

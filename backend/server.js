@@ -764,6 +764,7 @@ app.get("/api/professionals", async (req, res) => {
       other: professional.externalLinks?.other || "",
       industry: professional.industry,
       services: professional.services,
+      volunteeringFor: professional.volunteeringFor,
       otherInformation: professional.otherInformation,  // NEW
     })
   )
@@ -1053,8 +1054,7 @@ app.delete("/api/availability", requireAuth, async (req, res) => {
 // ===== POST /api/meetings — book a meeting with a professional =====
 app.post("/api/meetings", requireAuth, async (req, res) => {
   try {
-    const { professionalId, date } = req.body;
-
+    const { professionalId, date, purpose, notes } = req.body;
     if (!professionalId || !date) {
       return res.status(400).json({ message: "professionalId and date are required." });
     }
@@ -1072,6 +1072,13 @@ app.post("/api/meetings", requireAuth, async (req, res) => {
     const professional = await Professional.findById(professionalId);
     if (!professional) {
       return res.status(404).json({ message: "Professional not found." });
+    }
+
+    // Purpose must be one the professional actually offers
+    if (purpose && !professional.volunteeringFor.includes(purpose)) {
+      return res.status(400).json({
+        message: "This professional does not offer that meeting type.",
+      });
     }
 
     const startOfWeek = new Date(meetingDate);
@@ -1109,6 +1116,8 @@ const meeting = await Meeting.create({
       professional: professional._id,
       student: student._id,
       date: meetingDate,
+      purpose: purpose || "",
+      notes: notes || "",
       status: "scheduled",
     });
 

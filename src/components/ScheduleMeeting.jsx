@@ -1,6 +1,8 @@
 import {useState, useEffect} from "react";
 import styles from "./ScheduleMeeting.module.css";
-
+import timeclockIcon from "../assets/timeclock.svg";
+import calendarIcon from "../assets/calendar.svg";
+import worldIcon from "../assets/earth.svg";
 
 // Turn a specific date's availability blocks into 1-hour slot start times.
 // e.g. a 10:00-13:00 block on that weekday becomes ["10:00", "11:00", "12:00"]
@@ -57,6 +59,12 @@ function formatSlot(slot) {
   return `${hour12}:${String(minute).padStart(2, "0")} ${period}`;
 }
 
+// Given "10:00", return "11:00 AM" — the end of a 1-hour meeting.
+function formatEndSlot(slot) {
+  const [hour] = slot.split(":").map(Number);
+  return formatSlot(`${String(hour + 1).padStart(2, "0")}:00`);
+}
+
 
 export default function ScheduleMeeting({ professional, onClose }) {
   const [selectedDate, setSelectedDate] = useState(null);
@@ -65,6 +73,9 @@ export default function ScheduleMeeting({ professional, onClose }) {
   const [loadingAvail, setLoadingAvail] = useState(true);
   const [booking, setBooking] = useState(false);
   const [bookingStatus, setBookingStatus] = useState(null);
+  const [purpose, setPurpose] = useState("");
+  const [notes, setNotes] = useState("");
+  const [step, setStep] = useState("calendar");
   const [viewMonth, setViewMonth] = useState(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
@@ -93,6 +104,7 @@ useEffect(() => {
   const openDays = availableDaysOfWeek(blocks);
   const cells = buildMonthGrid(viewMonth.getFullYear(), viewMonth.getMonth());
   const daySlots = selectedDate ? slotsForDate(selectedDate, blocks) : [];
+  const allowedPurposes = professional?.volunteeringFor || [];
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -132,6 +144,8 @@ useEffect(() => {
         body: JSON.stringify({
           professionalId: professional.id,
           date: meetingDate.toISOString(),
+          purpose,
+          notes,
         }),
       });
 
@@ -158,10 +172,15 @@ useEffect(() => {
           &times;
         </button>
 
-        <h2 className={styles.name}>{professional.name}</h2>
-        <p className={styles.duration}>1 Hour meeting</p>
-        <h3 className={styles.heading}>Select a Date &amp; Time</h3>
+        {step === "calendar" && (
+          <>
+            <h2 className={styles.name}>{professional.name}</h2>
+            <p className={styles.duration}>1 Hour meeting</p>
+            <h3 className={styles.heading}>Select a Date &amp; Time</h3>
+          </>
+        )}
 
+        {step === "calendar" && (
         <div className={styles.scheduleRow}>
         <div className={styles.calendarBox}> 
              <div className={styles.monthRow}>
@@ -219,7 +238,7 @@ useEffect(() => {
                   <button
                     key={slot}
                     type="button"
-                    onClick={() => setSelectedSlot(slot)}
+                    onClick={() => { setSelectedSlot(slot); setStep("details"); }}
                     className={[
                       styles.slot,
                       selectedSlot === slot ? styles.slotSelected : "",
@@ -231,29 +250,96 @@ useEffect(() => {
               </div>
             )}
 
-            {selectedSlot && (
-              <div className={styles.confirmRow}>
-                <button
-                  type="button"
-                  className={styles.confirmBtn}
-                  onClick={handleBook}
-                  disabled={booking}
-                >
-                  {booking ? "Booking…" : `Confirm ${formatSlot(selectedSlot)} meeting`}
-                </button>
-
-                {bookingStatus && (
-                  <p className={bookingStatus.type === "success" ? styles.bookSuccess : styles.bookError}>
-                    {bookingStatus.msg}
-                  </p>
-                )}
-              </div>
-            )}
 
             
           </div>
         )}
         </div>
+        )}
+
+        {step === "details" && (
+          <div className={styles.detailsView}>
+            <button
+              type="button"
+              className={styles.backBtn}
+              onClick={() => setStep("calendar")}
+              aria-label="Back to calendar"
+            >
+              ←
+            </button>
+
+            <h2 className={styles.detailsTitle}>Meeting Details</h2>
+            <p className={styles.detailsSub}>Meeting with {professional.name}</p>
+
+            <div className={styles.infoRow}>
+              <img src={timeclockIcon} alt="Time clock" />
+              <span>1 hour</span>
+            </div>
+
+            <div className={styles.infoRow}>
+              <img src={calendarIcon} alt="Calendar" />
+              <span>
+                {formatSlot(selectedSlot)} - {formatEndSlot(selectedSlot)},{" "}
+                {selectedDate?.toLocaleDateString("en-US", {
+                  weekday: "long",
+                  month: "long",
+                  day: "numeric",
+                  year: "numeric",
+                })}
+              </span>
+            </div>
+
+            <div className={styles.infoRow}>
+              <img src={worldIcon} alt="World" />
+              <span>{availability?.timezone || "America/New_York"}</span>
+            </div>
+
+            {allowedPurposes.length > 0 && (
+              <>
+                <p className={styles.detailsQuestion}>
+                  Which of the following services are you requesting?
+                </p>
+                <div className={styles.serviceOptions}>
+                  {allowedPurposes.map((option) => (
+                    <label key={option} className={styles.serviceBox}>
+                      <input
+                        type="checkbox"
+                        checked={purpose === option}
+                        onChange={() => setPurpose(purpose === option ? "" : option)}
+                      />
+                      <span>{option}</span>
+                    </label>
+                  ))}
+                </div>
+              </>
+            )}
+
+            <p className={styles.detailsQuestion}>
+              Please share anything that the mentor should know before the meeting.
+            </p>
+            <textarea
+              className={styles.detailsNotes}
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              rows={5}
+            />
+
+            <button
+              type="button"
+              className={styles.scheduleEventBtn}
+              onClick={handleBook}
+              disabled={booking}
+            >
+              {booking ? "Scheduling…" : "Schedule Event"}
+            </button>
+
+            {bookingStatus && (
+              <p className={bookingStatus.type === "success" ? styles.bookSuccess : styles.bookError}>
+                {bookingStatus.msg}
+              </p>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
