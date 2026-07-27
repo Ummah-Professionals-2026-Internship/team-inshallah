@@ -1,8 +1,11 @@
-import { useState, useRef, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Dashboard from "./Dashboard";
 import styles from "./AvailabilityCalendar.module.css";
+import SyncCalendar from "./SyncCalendar";
 
 const SLOT_MINUTES = 30;
+const SLOT_HEIGHT = 28;
+const DAYS_PER_PAGE = 5;
 const WEEKDAY_ORDER = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
 const CALENDAR_NAV_LINKS = [
@@ -24,8 +27,6 @@ function minutesToLabel(mins) {
     return `${h12}:${String(m).padStart(2, "0")} ${period}`;
 }
 
-// builds the day columns to display, based on what was picked in the
-// "what dates/times might work" step
 function buildDayColumns(availability) {
     if (!availability) return [];
     if (availability.mode === "specific") {
@@ -35,11 +36,12 @@ function buildDayColumns(availability) {
                 const date = new Date(y, m, d);
                 return {
                     key,
+                    date,
                     label: date.toLocaleDateString(undefined, { weekday: "short" }),
                     sublabel: String(date.getDate()),
                 };
             })
-            .sort((a, b) => a.key.localeCompare(b.key));
+            .sort((a, b) => a.date - b.date);
     }
     return WEEKDAY_ORDER
         .filter((d) => availability.weekdays.has(d))
@@ -57,44 +59,80 @@ export default function AvailabilityCalendar({ availability, onClose, onSave, us
         return out;
     }, [startMin, endMin]);
 
-    const [selected, setSelected] = useState(new Set());
-    const [busy, setBusy] = useState(new Set()); // populated once a calendar is synced
+    const [page, setPage] = useState(0);
+    const totalPages = Math.max(1, Math.ceil(days.length / DAYS_PER_PAGE));
+    const visibleDays = useMemo(
+        () => days.slice(page * DAYS_PER_PAGE, page * DAYS_PER_PAGE + DAYS_PER_PAGE),
+        [days, page]
+    );
+
+    // finalized blocks: { id, dayKey, startIdx, endIdx }
+    const [blocks, setBlocks] = useState([]);
+    const [busy, setBusy] = useState(new Set());
     const [syncing, setSyncing] = useState(false);
-    const dragState = useRef(null);
+    const [showSyncModal, setShowSyncModal] = useState(false);
+    const [dragging, setDragging] = useState(null); // { dayKey, startIdx, hoverIdx }
 
-    const cellKey = (dayKey, slot) => `${dayKey}__${slot}`;
+    const busyKey = (dayKey, slotStart) => `${dayKey}__${slotStart}`;
 
-    const applyCell = (dayKey, slot, paintOn) => {
-        const key = cellKey(dayKey, slot);
-        if (busy.has(key)) return; // can't select over a busy block
-        setSelected((prev) => {
-            const next = new Set(prev);
-            if (paintOn) next.add(key);
-            else next.delete(key);
-            return next;
-        });
+    const isInDragRange = (dayKey, idx) => {
+        if (!dragging || dragging.dayKey !== dayKey) return false;
+        const lo = Math.min(dragging.startIdx, dragging.hoverIdx);
+        const hi = Math.max(dragging.startIdx, dragging.hoverIdx);
+        return idx >= lo && idx <= hi;
     };
 
-    const handleMouseDown = (dayKey, slot) => {
-        const key = cellKey(dayKey, slot);
-        const paintOn = !selected.has(key);
-        dragState.current = { paintOn };
-        applyCell(dayKey, slot, paintOn);
+    // starting a drag is allowed anywhere that isn't busy - including on top
+    // of an existing block, so users can extend/merge by dragging over it
+    const handleMouseDown = (dayKey, idx) => {
+        setDragging({ dayKey, startIdx: idx, hoverIdx: idx });
     };
 
-    const handleMouseEnter = (dayKey, slot) => {
-        if (!dragState.current) return;
-        applyCell(dayKey, slot, dragState.current.paintOn);
+    const handleMouseEnter = (dayKey, idx) => {
+        if (!dragging || dragging.dayKey !== dayKey) return;
+        setDragging((prev) => ({ ...prev, hoverIdx: idx }));
     };
 
     useEffect(() => {
-        const stopDrag = () => { dragState.current = null; };
-        window.addEventListener("mouseup", stopDrag);
-        return () => window.removeEventListener("mouseup", stopDrag);
+        const finishDrag = () => {
+            setDragging((current) => {
+                if (!current) return null;
+                const { dayKey, startIdx, hoverIdx } = current;
+                const lo = Math.min(startIdx, hoverIdx);
+                const hi = Math.max(startIdx, hoverIdx) + 1;
+
+                setBlocks((prev) => {
+                    const dayBlocks = prev.filter((b) => b.dayKey === dayKey);
+                    const otherDaysBlocks = prev.filter((b) => b.dayKey !== dayKey);
+
+                    // any block that overlaps OR touches the new range gets merged in
+                    const merging = dayBlocks.filter((b) => b.startIdx <= hi && b.endIdx >= lo);
+                    const untouched = dayBlocks.filter((b) => !merging.includes(b));
+
+                    const mergedStart = Math.min(lo, ...merging.map((b) => b.startIdx));
+                    const mergedEnd = Math.max(hi, ...merging.map((b) => b.endIdx));
+
+                    const mergedBlock = {
+                        id: merging.length > 0 ? merging[0].id : `${dayKey}-${Date.now()}`,
+                        dayKey,
+                        startIdx: mergedStart,
+                        endIdx: mergedEnd,
+                    };
+
+                    return [...otherDaysBlocks, ...untouched, mergedBlock];
+                });
+
+                return null;
+            });
+        };
+        window.addEventListener("mouseup", finishDrag);
+        return () => window.removeEventListener("mouseup", finishDrag);
     }, []);
 
-    // connecting backend next week
-    const handleSyncCalendar = async () => {
+    const removeBlock = (id) => setBlocks((prev) => prev.filter((b) => b.id !== id));
+
+    const handleSyncCalendar = async (provider) => {
+        setShowSyncModal(false);
         setSyncing(true);
         try {
             const res = await fetch("http://localhost:5050/api/professional/availability/sync", {
@@ -103,11 +141,11 @@ export default function AvailabilityCalendar({ availability, onClose, onSave, us
                     "Content-Type": "application/json",
                     Authorization: `Bearer ${localStorage.getItem("token")}`,
                 },
-                body: JSON.stringify({ provider: availability?.method || "manual" }),
+                body: JSON.stringify({ provider }),
             });
             const data = await res.json().catch(() => ({}));
             if (data.busySlots) {
-                setBusy(new Set(data.busySlots.map((b) => cellKey(b.dayKey, b.slot))));
+                setBusy(new Set(data.busySlots.map((b) => busyKey(b.dayKey, b.slot))));
             }
         } catch {
             // connecting backend next week
@@ -116,12 +154,12 @@ export default function AvailabilityCalendar({ availability, onClose, onSave, us
         }
     };
 
-    // connecting backend next week
     const handleSave = async () => {
-        const blocks = Array.from(selected).map((key) => {
-            const [dayKey, slot] = key.split("__");
-            return { dayKey, slot: Number(slot) };
-        });
+        const payloadBlocks = blocks.map((b) => ({
+            dayKey: b.dayKey,
+            startSlot: slots[b.startIdx],
+            endSlot: b.endIdx < slots.length ? slots[b.endIdx] : slots[slots.length - 1] + SLOT_MINUTES,
+        }));
         try {
             await fetch("http://localhost:5050/api/professional/availability/blocks", {
                 method: "POST",
@@ -133,19 +171,19 @@ export default function AvailabilityCalendar({ availability, onClose, onSave, us
                     startTime: availability?.startTime,
                     endTime: availability?.endTime,
                     timezone: availability?.timezone,
-                    blocks,
+                    blocks: payloadBlocks,
                 }),
             });
         } catch {
             // connecting backend next week
         }
-        onSave?.(blocks);
+        onSave?.(payloadBlocks);
         onClose();
     };
 
     const handleCalendarNavClick = (label) => {
         if (label === "Add Calendar") {
-            handleSyncCalendar();
+            setShowSyncModal(true);
         } else if (label === "Home") {
             onClose();
         }
@@ -162,39 +200,147 @@ export default function AvailabilityCalendar({ availability, onClose, onSave, us
             upcomingMeetings={[]}
             previousMeetings={[]}
         >
-            <div className={styles.gridWrap}>
-                <div
-                    className={styles.grid}
-                    style={{ gridTemplateColumns: `80px repeat(${days.length}, 1fr)` }}
-                >
-                    <div className={styles.cornerCell} />
-                    {days.map((d) => (
-                        <div key={d.key} className={styles.dayHeader}>
-                            <span className={styles.dayHeaderLabel}>{d.label}</span>
-                            {d.sublabel !== "" && <span className={styles.dayHeaderSub}>{d.sublabel}</span>}
-                        </div>
-                    ))}
+            {totalPages > 1 && (
+                <div className={styles.pageNav}>
+                    <button
+                        type="button"
+                        className={styles.pageNavBtn}
+                        onClick={() => setPage((p) => Math.max(0, p - 1))}
+                        disabled={page === 0}
+                        aria-label="Previous days"
+                    >
+                        ‹
+                    </button>
+                    <span className={styles.pageNavLabel}>
+                        {page * DAYS_PER_PAGE + 1}–{Math.min((page + 1) * DAYS_PER_PAGE, days.length)} of {days.length}
+                    </span>
+                    <button
+                        type="button"
+                        className={styles.pageNavBtn}
+                        onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                        disabled={page >= totalPages - 1}
+                        aria-label="Next days"
+                    >
+                        ›
+                    </button>
+                </div>
+            )}
 
-                    {slots.map((slot) => (
-                        <div key={slot} style={{ display: "contents" }}>
-                            <div className={styles.timeLabel}>{minutesToLabel(slot)}</div>
-                            {days.map((d) => {
-                                const key = cellKey(d.key, slot);
-                                const isBusy = busy.has(key);
-                                const isSelected = selected.has(key);
+            <div className={styles.gridWrap}>
+                <div className={styles.calendarInner}>
+                    <div className={styles.headerRow}>
+                        <div className={styles.cornerCell} />
+                        {visibleDays.map((d) => (
+                            <div key={d.key} className={styles.dayHeader}>
+                                <span className={styles.dayHeaderLabel}>{d.label}</span>
+                                {d.sublabel !== "" && (
+                                    <span className={styles.dayHeaderSubCircle}>{d.sublabel}</span>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+
+                    <div className={styles.bodyRow}>
+                        <div className={styles.timeColumn}>
+                            {slots.map((slot) => {
+                                const isHour = slot % 60 === 0;
                                 return (
                                     <div
-                                        key={key}
-                                        className={`${styles.slotCell} ${isBusy ? styles.slotCellBusy : ""} ${isSelected ? styles.slotCellSelected : ""}`}
-                                        onMouseDown={() => !isBusy && handleMouseDown(d.key, slot)}
-                                        onMouseEnter={() => handleMouseEnter(d.key, slot)}
-                                    />
+                                        key={slot}
+                                        className={`${styles.timeLabel} ${isHour ? styles.timeLabelHour : styles.timeLabelDashed}`}
+                                    >
+                                        {isHour ? minutesToLabel(slot) : ""}
+                                    </div>
                                 );
                             })}
                         </div>
-                    ))}
+
+                        {visibleDays.map((d) => (
+                            <div key={d.key} className={styles.dayColumn}>
+                                {slots.map((slot, idx) => {
+                                    const isHour = slot % 60 === 0;
+                                    const isBusy = busy.has(busyKey(d.key, slot));
+                                    const inDrag = isInDragRange(d.key, idx);
+                                    return (
+                                        <div
+                                            key={slot}
+                                            className={`${styles.slotCell} ${isHour ? styles.slotCellHourLine : styles.slotCellDashedLine} ${isBusy ? styles.slotCellBusy : ""} ${inDrag ? styles.slotCellDragging : ""}`}
+                                            onMouseDown={() => !isBusy && handleMouseDown(d.key, idx)}
+                                            onMouseEnter={() => handleMouseEnter(d.key, idx)}
+                                        />
+                                    );
+                                })}
+
+                                {blocks
+                                    .filter((b) => b.dayKey === d.key)
+                                    .map((b) => {
+                                        const top = b.startIdx * SLOT_HEIGHT;
+                                        const height = (b.endIdx - b.startIdx) * SLOT_HEIGHT;
+                                        const startLabel = minutesToLabel(slots[b.startIdx]);
+                                        const endMinutes =
+                                            b.endIdx < slots.length ? slots[b.endIdx] : slots[slots.length - 1] + SLOT_MINUTES;
+                                        const endLabel = minutesToLabel(endMinutes);
+                                        const isSingleSlot = b.endIdx - b.startIdx === 1;
+                                        return (
+                                            <div key={b.id} className={styles.availableBlock} style={{ top, height }}>
+                                                <button
+                                                    type="button"
+                                                    className={styles.blockRemoveBtn}
+                                                    onMouseDown={(e) => e.stopPropagation()}
+                                                    onClick={() => removeBlock(b.id)}
+                                                    aria-label="Remove availability block"
+                                                >
+                                                    ×
+                                                </button>
+                                               {isSingleSlot ? (
+                                                    <div className={styles.blockRowInline}>
+                                                        <p className={styles.blockTitle}>Available</p>
+                                                        <p className={styles.blockTime}>{startLabel} – {endLabel}</p>
+                                                    </div>
+                                                ) : (
+                                                    <>
+                                                        <p className={styles.blockTitle}>Available</p>
+                                                        <p className={styles.blockTime}>{startLabel} – {endLabel}</p>
+                                                    </>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+
+                                {dragging?.dayKey === d.key && (() => {
+                                    const lo = Math.min(dragging.startIdx, dragging.hoverIdx);
+                                    const hi = Math.max(dragging.startIdx, dragging.hoverIdx) + 1;
+                                    const top = lo * SLOT_HEIGHT;
+                                    const height = (hi - lo) * SLOT_HEIGHT;
+                                    const startLabel = minutesToLabel(slots[lo]);
+                                    const endMinutes = hi < slots.length ? slots[hi] : slots[slots.length - 1] + SLOT_MINUTES;
+                                    const endLabel = minutesToLabel(endMinutes);
+                                    const isSingleSlot = hi - lo === 1;
+                                    return (
+                                        <div className={styles.availableBlockPreview} style={{ top, height }}>
+                                            {isSingleSlot ? (
+                                            <div className={styles.blockRowInline}>
+                                                <p className={styles.blockTitle}>Available</p>
+                                                <p className={styles.blockTime}>{startLabel} – {endLabel}</p>
+                                            </div>
+                                        ) : (
+                                            <>
+                                                <p className={styles.blockTitle}>Available</p>
+                                                <p className={styles.blockTime}>{startLabel} – {endLabel}</p>
+                                            </>
+                                        )}
+                                        </div>
+                                    );
+                                })()}
+                            </div>
+                        ))}
+                    </div>
                 </div>
             </div>
+
+            <p className={styles.hintText}>
+                Click and drag on any day column to add or extend an availability block
+            </p>
 
             <div className={styles.footer}>
                 {syncing && <span className={styles.syncingLabel}>Syncing calendar…</span>}
@@ -202,6 +348,13 @@ export default function AvailabilityCalendar({ availability, onClose, onSave, us
                     Save Availability
                 </button>
             </div>
+
+            {showSyncModal && (
+                <SyncCalendar
+                    onClose={() => setShowSyncModal(false)}
+                    onSelect={(methodId) => handleSyncCalendar(methodId)}
+                />
+            )}
         </Dashboard>
     );
 }

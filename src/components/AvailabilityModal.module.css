@@ -347,18 +347,44 @@
 }
 
 .methodBtn {
-    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    min-height: 60px;
+    gap: 16px;
+    padding: 12px 20px;
     border-radius: 10px;
     border: 1px solid var(--brand-input-border);
     background: #fff;
-    font-size: 15px;
-    font-weight: 600;
+    font-size: 16px;
+    font-weight: 400;
     font-family: var(--font-brand);
     color: var(--color-navy-dark);
     text-align: left;
     cursor: pointer;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+}
+
+.methodIcon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 32px;
+}
+
+.methodLabel {
+    flex: 1;
+}
+
+.methodLabelCentered {
+    flex: 1;
+    text-align: center;
 }
 
 .methodBtn:hover {
     background: var(--color-grey-light);
+}
+
+.methodBtnCentered {
+    justify-content: center;
 }
