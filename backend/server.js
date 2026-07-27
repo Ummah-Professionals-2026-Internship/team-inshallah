@@ -19,6 +19,7 @@ import authRoutes from "./routes/auth.js";
 import emailVerificationRoutes from "./routes/emailVerification.js";
 import { requireAuth } from "./middleware/auth.js";
 import User from "./models/User.js";
+import { sendMeetingEmail } from "./utils/mailer.js";
 
 dotenv.config();
 
@@ -1112,6 +1113,9 @@ if (studentMeetingThisWeek) {
   });
 }
 
+const studentUser = await User.findById(student.user);
+const professionalUser = await User.findById(professional.user);
+
 const meeting = await Meeting.create({
       professional: professional._id,
       student: student._id,
@@ -1121,6 +1125,43 @@ const meeting = await Meeting.create({
       status: "scheduled",
     });
 
+
+  // Send confirmation emails to both parties.
+    // Wrapped so an email failure never breaks a successful booking.
+    try {
+      const dateText = meetingDate.toLocaleString("en-US", {
+        weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+        timeZoneName: "short",
+      });
+
+      if (studentUser?.email) {
+        await sendMeetingEmail(studentUser.email, {
+          recipientName: student.name,
+          otherPartyName: professional.name,
+          dateText,
+          purpose,
+          notes,
+        });
+      }
+
+      if (professionalUser?.email) {
+        await sendMeetingEmail(professionalUser.email, {
+          recipientName: professional.name,
+          otherPartyName: student.name,
+          dateText,
+          purpose,
+          notes,
+        });
+      }
+    } catch (mailErr) {
+      console.log("MEETING EMAIL ERROR (booking still succeeded):", mailErr);
+    }
+    
     res.status(201).json({ message: "Meeting booked!", meeting });
   } catch (err) {
     console.log("BOOK MEETING ERROR:", err);
