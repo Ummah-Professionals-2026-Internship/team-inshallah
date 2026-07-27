@@ -82,8 +82,7 @@ export default function AvailabilityCalendar({ availability, onClose, onSave, us
         return idx >= lo && idx <= hi;
     };
 
-    // starting a drag is allowed anywhere that isn't busy - including on top
-    // of an existing block, so users can extend/merge by dragging over it
+    // drag allowed anywhere, can reselect over time
     const handleMouseDown = (dayKey, idx) => {
         setDragging({ dayKey, startIdx: idx, hoverIdx: idx });
     };
