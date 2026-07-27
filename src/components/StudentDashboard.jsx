@@ -18,7 +18,7 @@ const STUDENT_TODO = [
 const UPCOMING_MEETINGS = [];
 const PREVIOUS_MEETINGS = [];
 
-export default function StudentDashboard({ userName = "Maryam Khan" }) {
+export default function StudentDashboard({ userName = " " }) {
   const [view, setView] = useState("dashboard"); // 'dashboard' or 'professionals'
   const [profilePhoto, setProfilePhoto] = useState("");
   const [displayName, setDisplayName] = useState(userName);
