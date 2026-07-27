@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import styles from "./ViewProfessionals.module.css";
 import MentorCard from "./MentorCard";
+import ProfessionalDetail from "./ProfessionalDetail";
+import ScheduleMeeting from "./ScheduleMeeting";
 
 export default function ViewProfessionals({ onClose, category = "Business" }) {
   const [professionals, setProfessionals] = useState([]);
@@ -12,6 +14,8 @@ export default function ViewProfessionals({ onClose, category = "Business" }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchText, setSearchText] = useState("");
   const observerTarget = useRef(null);
+  const [selectedProfessional, setSelectedProfessional] = useState(null);
+  const [schedulingFor, setSchedulingFor] = useState(null);
 
   const fetchProfessionals = useCallback(async (pageToFetch, industry, services) => {
     setLoading(true);
@@ -145,6 +149,7 @@ export default function ViewProfessionals({ onClose, category = "Business" }) {
             website={professional.website}
             github={professional.github}
             onMoreClick={() => console.log("More clicked for:", professional.name)}
+            onCardClick={() => setSelectedProfessional(professional)}
           />
         ))}
       </div>
@@ -155,6 +160,20 @@ export default function ViewProfessionals({ onClose, category = "Business" }) {
       {loading && <p className={styles.emptyText}>Loading more professionals...</p>}
 
       <div ref={observerTarget} style={{ height: "1px" }} />
+
+      <ProfessionalDetail
+        professional={selectedProfessional}
+        onClose={() => setSelectedProfessional(null)}
+        onSchedule={() => {
+          setSchedulingFor(selectedProfessional);
+          setSelectedProfessional(null);
+        }}
+      />
+
+      <ScheduleMeeting
+        professional={schedulingFor}
+        onClose={() => setSchedulingFor(null)}
+      />
     </div>
   );
 }

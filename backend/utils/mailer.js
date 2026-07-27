@@ -52,3 +52,32 @@ export async function sendVerificationEmail(to, code) {
 
   return info;
 }
+
+
+//the notification email when a meeting is scheduled 
+export async function sendMeetingEmail(to, { recipientName, otherPartyName, dateText, purpose, notes }) {
+  const mailer = await getTransporter();
+
+  const info = await mailer.sendMail({
+    from: process.env.MAIL_FROM || '"Ummah Professionals" <no-reply@ummahprofessionals.org>',
+    to,
+    subject: 'Your Ummah Professionals meeting is scheduled',
+    text: `Hi ${recipientName}, your meeting with ${otherPartyName} is scheduled for ${dateText}.`,
+    html: `
+      <div style="font-family: sans-serif; color: #00212C;">
+        <h2 style="color: #007CA6;">Meeting Scheduled</h2>
+        <p>Hi ${recipientName},</p>
+        <p>Your meeting with <strong>${otherPartyName}</strong> is confirmed.</p>
+        <p><strong>When:</strong> ${dateText}</p>
+        ${purpose ? `<p><strong>Purpose:</strong> ${purpose}</p>` : ""}
+        ${notes ? `<p><strong>Notes:</strong> ${notes}</p>` : ""}
+        <p style="color: #007CA6;">See you there!</p>
+      </div>
+    `,
+  });
+
+  const previewUrl = nodemailer.getTestMessageUrl(info);
+  if (previewUrl) console.log('🔗 Preview the meeting email here:', previewUrl);
+
+  return info;
+}
