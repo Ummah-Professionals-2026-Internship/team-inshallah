@@ -11,14 +11,6 @@ function GoogleIcon() {
     );
 }
 
-function AppleIcon() {
-    return (
-        <svg viewBox="0 0 24 24" width="26" height="26" fill="#000000">
-            <path d="M16.365 1.43c0 1.14-.475 2.24-1.24 3.05-.86.9-2.24 1.6-3.4 1.5-.14-1.1.47-2.28 1.22-3.03.85-.87 2.33-1.55 3.42-1.52zM20.5 17.2c-.5 1.15-.75 1.66-1.4 2.68-.9 1.44-2.18 3.23-3.77 3.24-1.4.01-1.76-.92-3.67-.91-1.9.01-2.3.93-3.7.92-1.6-.02-2.8-1.63-3.7-3.06-2.55-4.03-2.8-8.75-1.24-11.27.9-1.44 2.36-2.36 3.86-2.36 1.6 0 2.6.99 3.94.99 1.3 0 2.06-.99 3.94-.99 1.24 0 2.6.68 3.55 1.86-3.1 1.7-2.6 6.14.19 7.9z" />
-        </svg>
-    );
-}
-
 function OutlookIcon() {
     return (
         <svg viewBox="0 0 48 48" width="28" height="28">
@@ -34,7 +26,6 @@ function OutlookIcon() {
 
 const METHODS = [
     { id: "google", label: "Autofill with Google Calendar", icon: <GoogleIcon /> },
-    { id: "apple", label: "Autofill with Apple Calendar", icon: <AppleIcon /> },
     { id: "outlook", label: "Autofill with Outlook Calendar", icon: <OutlookIcon /> },
     { id: "manual", label: "Manually", icon: null },
 ];
@@ -53,7 +44,9 @@ export default function SyncCalendar({ onClose, onSelect }) {
                             onClick={() => onSelect(m.id)}
                         >
                             {m.icon && <span className={styles.methodIcon}>{m.icon}</span>}
-                            <span className={styles.methodLabel}>{m.label}</span>
+                            <span className={m.icon ? styles.methodLabel : styles.methodLabelCentered}>
+                                {m.label}
+                            </span>
                         </button>
                     ))}
                 </div>
