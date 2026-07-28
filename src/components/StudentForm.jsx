@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './forms.css';
+import { API_BASE_URL } from '../config';
 import logo from "../assets/Brand Kit/Logos/PNGs/horizontal blue.png";
 import bg from "../assets/Brand Kit/careerprep-bg.png";
 
@@ -95,7 +96,7 @@ export default function StudentForm() {
       fd.append('otherInformation', form.otherInfoText);
       fd.append('resume', form.resume);
 
-      const res = await fetch('/api/student', {
+      const res = await fetch(`${API_BASE_URL}/api/student`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${localStorage.getItem('token')}`,
