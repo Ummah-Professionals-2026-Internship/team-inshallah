@@ -1,5 +1,6 @@
 // dashboard shown to students - wraps the shared Dashboard with their nav links + filler data
 import { useState, useEffect } from "react";
+import { API_BASE_URL } from "../config";
 import Dashboard from "./Dashboard";
 import ViewProfessionals from "./ViewProfessionals"; // Imports your existing component
 import StudentProfile from "./StudentProfile";
@@ -27,7 +28,7 @@ export default function StudentDashboard({ userName = "Maryam Khan" }) {
     const token = localStorage.getItem("token");
     if (!token) return;
 
-    fetch("http://localhost:5050/api/student/profile", {
+    fetch(`${API_BASE_URL}/api/student/profile`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((res) => (res.ok ? res.json() : null))

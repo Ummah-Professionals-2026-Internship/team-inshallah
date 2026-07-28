@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { API_BASE_URL } from "../config";
 import { useNavigate } from "react-router-dom";
 import "./Profile.css";
 import profileSettingIcon from "../assets/Profile setting icon.svg";
@@ -10,7 +11,7 @@ import logoutIcon from "../assets/Logout icon.svg";
 //   PUT  /api/student/profile  -> save (multipart; profilePicture optional)
 // Auth via Bearer token from localStorage ("token").
 
-const API = "http://localhost:5050";
+const API = API_BASE_URL;
 
 const REGIONS = ["US (+1)", "UK (+44)", "Canada (+1)", "Pakistan (+92)", "India (+91)", "Other"];
 const INDUSTRIES = ["Technology", "Finance", "Healthcare", "Law", "Engineering", "Education", "Business", "Other"];

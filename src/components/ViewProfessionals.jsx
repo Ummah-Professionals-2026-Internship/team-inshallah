@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { API_BASE_URL } from "../config";
 import styles from "./ViewProfessionals.module.css";
 import MentorCard from "./MentorCard";
 
@@ -19,7 +20,7 @@ export default function ViewProfessionals({ onClose, category = "Business" }) {
       const params = new URLSearchParams({ page: pageToFetch, limit: 12 });
       if (industry) params.append("industry", industry);
       if (services) params.append("services", services);
-      const res = await fetch(`http://localhost:5050/api/professionals?${params}`);
+      const res = await fetch(`${API_BASE_URL}/api/professionals?${params}`);
       const data = await res.json();
       setProfessionals((prev) =>
         pageToFetch === 1 ? data.professionals : [...prev, ...data.professionals]
