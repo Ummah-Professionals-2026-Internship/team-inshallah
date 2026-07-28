@@ -4,6 +4,25 @@ import ProfessionalProfile from "./ProfessionalProfile";
 import AvailabilityModal from "./AvailabilityModal";
 import AvailabilityCalendar from "./AvailabilityCalendar";
 
+// Transforms a meeting from the API into the shape MeetingTile expects.
+function transformMeeting(m) {
+  const d = new Date(m.date);
+  let tileStatus = m.status;
+  if (m.status === "scheduled") tileStatus = "upcoming";
+
+  return {
+    id: m._id,
+    with: m.student?.name || "Unknown",
+    day: d.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" }),
+    time: d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
+    type: m.purpose || "Meeting",
+    status: tileStatus,
+    link: m.link || "",
+    notes: m.notes || "",
+    rawDate: d,
+  };
+}
+
 const PROFESSIONAL_NAV_LINKS = [
   { label: "Home" },
   { label: "Update Availability" },
@@ -15,8 +34,6 @@ const PROFESSIONAL_TODO = [
   "Update your availability",
 ];
 
-const UPCOMING_MEETINGS = [];
-const PREVIOUS_MEETINGS = [];
 
 export default function ProfessionalDashboard({ userName = " " }) {
   const [activeView, setActiveView] = useState("home");
@@ -24,6 +41,8 @@ export default function ProfessionalDashboard({ userName = " " }) {
   const [displayName, setDisplayName] = useState(userName);
   const [availabilityStep, setAvailabilityStep] = useState(null);
   const [availabilityData, setAvailabilityData] = useState(null);
+  const [upcomingMeetings, setUpcomingMeetings] = useState([]);
+  const [previousMeetings, setPreviousMeetings] = useState([]);
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -42,6 +61,23 @@ export default function ProfessionalDashboard({ userName = " " }) {
         }
       })
       .catch(() => { });
+  }, []);
+
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+
+    fetch("http://localhost:5050/api/meetings", {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => (res.ok ? res.json() : { meetings: [] }))
+      .then((body) => {
+        const now = new Date();
+        const all = (body.meetings || []).map(transformMeeting);
+        setUpcomingMeetings(all.filter((m) => m.rawDate >= now));
+        setPreviousMeetings(all.filter((m) => m.rawDate < now));
+      })
+      .catch(() => {});
   }, []);
 
   const handleNavClick = (label) => {
@@ -76,8 +112,8 @@ export default function ProfessionalDashboard({ userName = " " }) {
         profilePhoto={profilePhoto}
         navLinks={PROFESSIONAL_NAV_LINKS}
         todoItems={PROFESSIONAL_TODO}
-        upcomingMeetings={UPCOMING_MEETINGS}
-        previousMeetings={PREVIOUS_MEETINGS}
+        upcomingMeetings={upcomingMeetings}
+        previousMeetings={previousMeetings}
         onNavClick={handleNavClick}
         onProfileClick={() => setActiveView("profile")}
       >

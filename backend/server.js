@@ -917,6 +917,34 @@ app.get("/api/availability/:professionalUserId", async (req, res) => {
   }
 });
 
+
+// ===== GET /api/meetings — meetings for the logged-in user (student or professional) =====
+app.get("/api/meetings", requireAuth, async (req, res) => {
+  try {
+    // Find the user's student and/or professional profile
+    const student = await Student.findOne({ user: req.userId });
+    const professional = await Professional.findOne({ user: req.userId });
+
+    const filter = [];
+    if (student) filter.push({ student: student._id });
+    if (professional) filter.push({ professional: professional._id });
+
+    if (filter.length === 0) {
+      return res.json({ meetings: [] });
+    }
+
+    const meetings = await Meeting.find({ $or: filter })
+      .populate("student", "name")
+      .populate("professional", "name")
+      .sort({ date: 1 });
+
+    res.json({ meetings });
+  } catch (err) {
+    console.log("GET MEETINGS ERROR:", err);
+    res.status(500).json({ message: "Server error. Please try again later." });
+  }
+});
+
 // ===== GET /api/calendar/google/connect — redirect user to Google's login/consent screen =====
 app.get("/api/calendar/google/connect", requireAuth, (req, res) => {
   const authUrl = googleOAuthClient.generateAuthUrl({
