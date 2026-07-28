@@ -1,6 +1,7 @@
 // email verification screen
 
 import { useState, useEffect, useRef } from "react";
+import { API_BASE_URL } from "../config";
 import { useNavigate, useLocation } from "react-router-dom";
 import styles from "./EmailVerification.module.css";
 
@@ -12,7 +13,7 @@ import bgPhoto from "../assets/Brand Kit/careerprep-bg.jpg";
 const CODE_LENGTH = 5;
 const RESEND_COOLDOWN = 60; // seconds
 
-const API_BASE = "http://localhost:5050/api/email-verification";
+const API_BASE = `${API_BASE_URL}/api/email-verification`;
 
 export default function EmailVerification() {
 

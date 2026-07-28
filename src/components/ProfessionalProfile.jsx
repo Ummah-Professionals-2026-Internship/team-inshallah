@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { API_BASE_URL } from "../config";
 import { useNavigate } from "react-router-dom";
 import "./Profile.css";
 import profileSettingIcon from "../assets/Profile setting icon.svg";
@@ -6,7 +7,7 @@ import settingsIcon from "../assets/Settings.svg";
 import logoutIcon from "../assets/Logout icon.svg";
 import MentorCard from "./MentorCard";
 
-const API = "http://localhost:5050";
+const API = API_BASE_URL;
 
 const REGIONS = ["+1", "+44", "+92", "+971", "+966", "+20", "+234"];
 
