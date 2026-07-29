@@ -230,7 +230,7 @@ export default function Dashboard({
         meeting={selectedMeeting}
         onClose={() => setSelectedMeeting(null)}
         onReschedule={(m) => console.log("reschedule", m)}
-        onCancel={(m) => console.log("cancel", m)}
+        onCancelled={(m) => window.location.reload()}
       />
     </div>
   );

@@ -945,6 +945,69 @@ app.get("/api/meetings", requireAuth, async (req, res) => {
   }
 });
 
+
+// ===== PATCH /api/meetings/:id/cancel — cancel a meeting =====
+app.patch("/api/meetings/:id/cancel", requireAuth, async (req, res) => {
+  try {
+    const { reason } = req.body;
+
+    const meeting = await Meeting.findById(req.params.id)
+      .populate("student", "name user")
+      .populate("professional", "name user");
+
+    if (!meeting) {
+      return res.status(404).json({ message: "Meeting not found." });
+    }
+
+    const isStudent = meeting.student?.user?.toString() === req.userId;
+    const isProfessional = meeting.professional?.user?.toString() === req.userId;
+
+    if (!isStudent && !isProfessional) {
+      return res.status(403).json({ message: "You are not part of this meeting." });
+    }
+
+    meeting.status = "cancelled";
+    meeting.cancelReason = reason || "";
+    meeting.cancelledBy = isStudent ? "student" : "professional";
+    await meeting.save();
+
+    try {
+      const studentUser = await User.findById(meeting.student.user);
+      const professionalUser = await User.findById(meeting.professional.user);
+      const dateText = new Date(meeting.date).toLocaleString("en-US", {
+        weekday: "long", month: "long", day: "numeric", hour: "numeric", minute: "2-digit",
+      });
+
+      if (studentUser?.email) {
+        await sendMeetingEmail(studentUser.email, {
+          recipientName: meeting.student.name,
+          otherPartyName: meeting.professional.name,
+          dateText: `CANCELLED — was ${dateText}`,
+          purpose: meeting.purpose,
+          notes: reason ? `Cancellation reason: ${reason}` : "",
+        });
+      }
+      if (professionalUser?.email) {
+        await sendMeetingEmail(professionalUser.email, {
+          recipientName: meeting.professional.name,
+          otherPartyName: meeting.student.name,
+          dateText: `CANCELLED — was ${dateText}`,
+          purpose: meeting.purpose,
+          notes: reason ? `Cancellation reason: ${reason}` : "",
+        });
+      }
+    } catch (mailErr) {
+      console.log("CANCEL EMAIL ERROR (cancel still succeeded):", mailErr);
+    }
+
+    res.json({ message: "Meeting cancelled.", meeting });
+  } catch (err) {
+    console.log("CANCEL MEETING ERROR:", err);
+    res.status(500).json({ message: "Server error. Please try again later." });
+  }
+});
+
+
 // ===== GET /api/calendar/google/connect — redirect user to Google's login/consent screen =====
 app.get("/api/calendar/google/connect", requireAuth, (req, res) => {
   const authUrl = googleOAuthClient.generateAuthUrl({

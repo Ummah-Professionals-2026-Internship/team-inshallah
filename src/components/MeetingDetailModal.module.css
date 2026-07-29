@@ -94,3 +94,47 @@
 .cancelBtn:hover {
   background: #fdecea;
 }
+
+.reasonInput {
+  width: 100%;
+  border: 0.0625rem solid #d6d9de;
+  border-radius: 0.5rem;
+  padding: 0.75rem;
+  font-size: 0.9375rem;
+  font-family: inherit;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.reasonInput:focus {
+  outline: none;
+  border-color: #007ca6;
+}
+
+.note {
+  font-size: 0.8125rem;
+  color: #6b7280;
+  margin: 0.75rem 0 0;
+}
+
+.errorText {
+  font-size: 0.875rem;
+  color: #d0342c;
+  margin: 0.5rem 0 0;
+}
+
+.backBtn {
+  flex: 1;
+  background: #ffffff;
+  color: #00212c;
+  border: 0.0625rem solid #d6d9de;
+  border-radius: 1.5rem;
+  padding: 0.75rem;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.backBtn:hover {
+  background: #f3f4f6;
+}
