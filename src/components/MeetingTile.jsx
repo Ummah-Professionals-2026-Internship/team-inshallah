@@ -1,7 +1,5 @@
 import styles from "./MeetingTile.module.css";
 
-// Maps a meeting's status to its color theme.
-// Ticket: upcoming = yellow, cancelled = red (crossed out), rescheduled = blue.
 function statusClass(status) {
   switch (status) {
     case "cancelled":
@@ -20,7 +18,7 @@ export default function MeetingTile({ meeting, onClick }) {
 
   return (
     <div
-      className={`${styles.tile} ${statusClass(meeting.status)}`}
+      className={`${styles.tile} ${isCancelled ? styles.tileCancelled : ""}`}
       onClick={() => onClick?.(meeting)}
       role="button"
       tabIndex={0}
@@ -28,23 +26,31 @@ export default function MeetingTile({ meeting, onClick }) {
         if ((e.key === "Enter" || e.key === " ") && onClick) onClick(meeting);
       }}
     >
-      <div className={`${styles.info} ${isCancelled ? styles.struck : ""}`}>
-        <p className={styles.name}>{meeting.with}</p>
-        <p className={styles.meta}>
-          {meeting.day} · {meeting.time} · {meeting.type}
-        </p>
+      {/* Left: colored time box */}
+      <div className={`${styles.timeBox} ${statusClass(meeting.status)}`}>
+        <span className={styles.dayLabel}>{meeting.day}</span>
+        <span className={styles.time}>{meeting.time}</span>
       </div>
 
-      {meeting.link && (
+      {/* Middle: name + type */}
+      <div className={`${styles.info} ${isCancelled ? styles.struck : ""}`}>
+        <p className={styles.name}>{meeting.with}</p>
+        <p className={styles.type}>{meeting.type}</p>
+      </div>
+
+      {/* Right: video/link button */}
+      {meeting.link && !isCancelled && (
         <a
           href={meeting.link}
           target="_blank"
           rel="noopener noreferrer"
-          className={styles.linkBtn}
+          className={styles.videoBtn}
           onClick={(e) => e.stopPropagation()}
-          aria-label="Open meeting link"
+          aria-label="Join meeting"
         >
-          Join
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+            <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z" />
+          </svg>
         </a>
       )}
     </div>
