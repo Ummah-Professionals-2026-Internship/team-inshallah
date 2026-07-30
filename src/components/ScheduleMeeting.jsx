@@ -66,7 +66,7 @@ function formatEndSlot(slot) {
 }
 
 
-export default function ScheduleMeeting({ professional, onClose }) {
+export default function ScheduleMeeting({ professional, onClose, rescheduleMeetingId = null, onRescheduled }) {
   const [selectedDate, setSelectedDate] = useState(null);
   const [selectedSlot, setSelectedSlot] = useState(null);
   const [availability, setAvailability] = useState(null);
@@ -135,33 +135,50 @@ useEffect(() => {
 
     try {
       const token = localStorage.getItem("token");
-      const res = await fetch("http://localhost:5050/api/meetings", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          professionalId: professional.id,
-          date: meetingDate.toISOString(),
-          purpose,
-          notes,
-        }),
-      });
 
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.message || "Booking failed.");
+      if (rescheduleMeetingId) {
+        // RESCHEDULE MODE: update existing meeting's date
+        const res = await fetch(
+          `http://localhost:5050/api/meetings/${rescheduleMeetingId}/reschedule`,
+          {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ date: meetingDate.toISOString() }),
+          }
+        );
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || "Reschedule failed.");
+        setBookingStatus({ type: "success", msg: "Meeting rescheduled!" });
+        onRescheduled?.();
+      } else {
+        // BOOKING MODE: create a new meeting
+        const res = await fetch("http://localhost:5050/api/meetings", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            professionalId: professional.id,
+            date: meetingDate.toISOString(),
+            purpose,
+            notes,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || "Booking failed.");
+        setBookingStatus({ type: "success", msg: "Meeting booked!" });
       }
-
-      setBookingStatus({ type: "success", msg: "Meeting booked!" });
     } catch (err) {
       setBookingStatus({ type: "error", msg: err.message });
     } finally {
       setBooking(false);
     }
-  }
+
+  }  
 
   if (!professional) return null;
 

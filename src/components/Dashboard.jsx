@@ -5,6 +5,7 @@ import logoFull from "../assets/Brand Kit/Logos/PNGs/horizontal white.png";
 import inboxIcon from "../assets/inbox chat button.png";
 import MeetingTile from "./MeetingTile";
 import MeetingDetailModal from "./MeetingDetailModal";
+import ScheduleMeeting from "./ScheduleMeeting";
 
 export default function Dashboard({
   userName,
@@ -21,6 +22,7 @@ export default function Dashboard({
   const [menuOpen, setMenuOpen] = useState(false);
   const [checked, setChecked] = useState({});
   const [selectedMeeting, setSelectedMeeting] = useState(null);
+  const [reschedulingMeeting, setReschedulingMeeting] = useState(null);
 
   const toggleTodo = (index) => {
     setChecked((prev) => ({ ...prev, [index]: !prev[index] }));
@@ -229,9 +231,26 @@ export default function Dashboard({
       <MeetingDetailModal
         meeting={selectedMeeting}
         onClose={() => setSelectedMeeting(null)}
-        onReschedule={(m) => console.log("reschedule", m)}
+        onReschedule={(m) => {
+          setReschedulingMeeting(m);
+          setSelectedMeeting(null);
+        }}
         onCancelled={(m) => window.location.reload()}
       />
+
+      {reschedulingMeeting && (
+        <ScheduleMeeting
+          professional={{
+            id: reschedulingMeeting.professionalId,
+            userId: reschedulingMeeting.professionalUserId,
+            name: reschedulingMeeting.with,
+            volunteeringFor: [],
+          }}
+          rescheduleMeetingId={reschedulingMeeting.id}
+          onClose={() => setReschedulingMeeting(null)}
+          onRescheduled={() => window.location.reload()}
+        />
+      )}
     </div>
   );
 }

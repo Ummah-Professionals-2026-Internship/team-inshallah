@@ -1,4 +1,7 @@
 import styles from "./MeetingTile.module.css";
+import chatIcon from "../assets/chaticon.svg";
+import joinMeetingButton from "../assets/joinmeetingbutton.svg";
+import feedbackIcon from "../assets/feedbackicon.svg";
 
 function statusClass(status) {
   switch (status) {
@@ -6,6 +9,8 @@ function statusClass(status) {
       return styles.cancelled;
     case "rescheduled":
       return styles.rescheduled;
+    case "completed":
+      return styles.completed;
     case "upcoming":
     case "scheduled":
     default:
@@ -38,21 +43,42 @@ export default function MeetingTile({ meeting, onClick }) {
         <p className={styles.type}>{meeting.type}</p>
       </div>
 
-      {/* Right: video/link button */}
-      {meeting.link && !isCancelled && (
-        <a
-          href={meeting.link}
-          target="_blank"
-          rel="noopener noreferrer"
-          className={styles.videoBtn}
-          onClick={(e) => e.stopPropagation()}
-          aria-label="Join meeting"
-        >
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-            <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z" />
-          </svg>
-        </a>
+      {/* Right: chat + join buttons */}
+      {!isCancelled && (
+        <div className={styles.buttonGroup}>
+          <button
+            type="button"
+            className={styles.iconBtn}
+            onClick={(e) => e.stopPropagation()}
+            aria-label="Chat (coming soon)"
+          >
+            <img src={chatIcon} alt="" className={styles.iconImg} />
+          </button>
+
+          {meeting.status === "completed" ? (
+            <button
+              type="button"
+              className={styles.iconBtn}
+              onClick={(e) => e.stopPropagation()}
+              aria-label="Give feedback"
+            >
+              <img src={feedbackIcon} alt="" className={`${styles.iconImg} ${styles.feedbackImg}`} />
+              </button>
+          ) : (
+            <a
+              href={meeting.link || "https://meet.google.com"}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={styles.iconBtn}
+              onClick={(e) => e.stopPropagation()}
+              aria-label="Join meeting"
+            >
+              <img src={joinMeetingButton} alt="" className={styles.iconImg} />
+            </a>
+          )}
+        </div>
       )}
+
     </div>
   );
 }

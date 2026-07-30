@@ -10,10 +10,15 @@ import StudentProfile from "./StudentProfile";
 function transformMeeting(m) {
   const d = new Date(m.date);
   let tileStatus = m.status;
-  if (m.status === "scheduled") tileStatus = "upcoming";
+  const inPast = new Date(m.date) < new Date();
+  if (m.status === "scheduled") {
+    tileStatus = inPast ? "completed" : "upcoming";
+  }
 
   return {
     id: m._id,
+    professionalUserId: m.professional?.user,
+    professionalId: m.professional?._id,
     with: m.professional?.name || "Unknown",
     day: d.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" }),
     time: d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
