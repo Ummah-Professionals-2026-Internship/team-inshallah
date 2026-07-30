@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './forms.css';
+import { API_BASE_URL } from '../config';
 import logo from '../assets/Brand Kit/Logos/PNGs/horizontal blue.png';
 import bg from '../assets/Brand Kit/careerprep-bg.png';
 
@@ -109,7 +110,7 @@ export default function ProfessionalForm() {
         fd.append('resume', form.resume);
 
         const token = localStorage.getItem('token');
-        const res = await fetch('/api/professional', {
+        const res = await fetch(`${API_BASE_URL}/api/professional`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
         body: fd,

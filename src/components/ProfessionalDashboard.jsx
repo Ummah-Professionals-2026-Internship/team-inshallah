@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { API_BASE_URL } from "../config";
 import Dashboard from "./Dashboard";
 import ProfessionalProfile from "./ProfessionalProfile";
 import AvailabilityModal from "./AvailabilityModal";
@@ -48,7 +49,7 @@ export default function ProfessionalDashboard({ userName = " " }) {
     const token = localStorage.getItem("token");
     if (!token) return;
 
-    fetch("http://localhost:5050/api/professional/profile", {
+    fetch(`${API_BASE_URL}/api/professional/profile`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((res) => (res.ok ? res.json() : null))
