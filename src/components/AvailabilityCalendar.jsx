@@ -2,6 +2,8 @@ import { useState, useEffect, useMemo } from "react";
 import Dashboard from "./Dashboard";
 import styles from "./AvailabilityCalendar.module.css";
 import SyncCalendar from "./SyncCalendar";
+import { API_BASE_URL } from "../config";
+const API = API_BASE_URL;
 
 const SLOT_MINUTES = 30;
 const SLOT_HEIGHT = 28;
