@@ -23,6 +23,10 @@ export default function Dashboard({
     setChecked((prev) => ({ ...prev, [index]: !prev[index] }));
   };
 
+  // Check if all items in the list are checked
+  const allCompleted =
+    todoItems.length > 0 && todoItems.every((_, index) => !!checked[index]);
+
   return (
     <div className={styles.page}>
       <header className={styles.header}>
@@ -34,16 +38,16 @@ export default function Dashboard({
         </div>
 
         <div
-  className={styles.userArea}
-  onClick={onProfileClick}
-  role="button"
-  tabIndex={0}
-  onKeyDown={(e) => {
-    if (e.key === "Enter" || e.key === " ") {
-      onProfileClick?.();
-    }
-  }}
->
+          className={styles.userArea}
+          onClick={onProfileClick}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if ((e.key === "Enter" || e.key === " ") && onProfileClick) {
+              onProfileClick(e);
+            }
+          }}
+        >
           <div className={styles.userText}>
             <p className={styles.userName}>{userName}</p>
             <p className={styles.userMeta}>{userRole}</p>
@@ -63,11 +67,25 @@ export default function Dashboard({
             type="button"
             className={styles.burgerBtn}
             onClick={(e) => {
-              e.stopPropagation();
+              e.stopPropagation(); // Stop click from triggering userArea profile click
               setMenuOpen((open) => !open);
             }}
             aria-label="Toggle menu"
             aria-expanded={menuOpen}
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "space-between",
+              alignItems: "stretch",
+              width: "36px",
+              height: "26px",
+              background: "transparent",
+              border: "none",
+              cursor: "pointer",
+              padding: "0",
+              boxSizing: "border-box",
+              flexShrink: 0,
+            }}
           >
             <span />
             <span />
@@ -146,29 +164,56 @@ export default function Dashboard({
 
               <div className={styles.rightColumn}>
                 <section className={styles.todoContainer}>
-                  <div className={styles.todoHeaderWrapper}>
-                    <h2 className={styles.todoBoxTitle}>To-Do List</h2>
-                  </div>
-                  <div className={styles.todoList}>
-                    {todoItems.map((item, index) => (
-                      <button
-                        key={item}
-                        type="button"
-                        className={styles.todoItem}
-                        onClick={() => toggleTodo(index)}
-                        aria-pressed={!!checked[index]}
-                      >
-                        <span
-                          className={`${styles.todoCircle} ${
-                            checked[index] ? styles.todoCircleChecked : ""
-                          }`}
-                        />
-                        <span className={checked[index] ? styles.todoTextChecked : ""}>
-                          {item}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
+                  {!allCompleted && (
+                    <>
+                      <div className={styles.todoHeaderWrapper}>
+                        <h2 className={styles.todoBoxTitle}>To-Do List</h2>
+                      </div>
+                      <div className={styles.todoList}>
+                        {todoItems.map((item, index) => {
+                          const isChecked = !!checked[index];
+                          return (
+                            <button
+                              key={item}
+                              type="button"
+                              className={`${styles.todoItem} ${
+                                isChecked ? styles.todoItemChecked : ""
+                              }`}
+                              onClick={() => toggleTodo(index)}
+                              aria-pressed={isChecked}
+                            >
+                              <span
+                                className={`${styles.todoCircle} ${
+                                  isChecked ? styles.todoCircleChecked : ""
+                                }`}
+                              >
+                                {isChecked && (
+                                  <svg
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="#1d4360"
+                                    strokeWidth="3.5"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    className={styles.checkIcon}
+                                  >
+                                    <polyline points="20 6 9 17 4 12" />
+                                  </svg>
+                                )}
+                              </span>
+                              <span
+                                className={
+                                  isChecked ? styles.todoTextChecked : ""
+                                }
+                              >
+                                {item}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </>
+                  )}
                 </section>
               </div>
             </div>

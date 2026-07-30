@@ -1,0 +1,116 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 33, 44, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 24px;
+}
+
+.modal {
+  position: relative;
+  background: #ffffff;
+  border-radius: 12px;
+  width: 100%;
+  max-width: 560px;
+  max-height: 85vh;
+  overflow-y: auto;
+  padding: 32px 40px 40px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+}
+
+.closeBtn {
+  position: absolute;
+  top: 16px;
+  right: 20px;
+  background: none;
+  border: none;
+  font-size: 28px;
+  line-height: 1;
+  cursor: pointer;
+  color: #00212c;
+}
+
+.heading {
+  text-align: center;
+  font-size: 22px;
+  color: #00212c;
+  margin: 8px 0 20px;
+}
+
+.avatar {
+  width: 130px;
+  height: 130px;
+  border-radius: 50%;
+  overflow: hidden;
+  margin: 0 auto 28px;
+  background: #b9bcc3;
+}
+
+.avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.avatarPlaceholder {
+  width: 100%;
+  height: 100%;
+  background: #b9bcc3;
+}
+
+.field {
+  margin-bottom: 18px;
+}
+
+.field label {
+  display: block;
+  font-size: 13px;
+  color: #007ca6;
+  margin-bottom: 6px;
+}
+
+.value {
+  border: 1px solid #d6d9de;
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-size: 14px;
+  color: #00212c;
+  min-height: 20px;
+}
+
+.aboutBox {
+  border: 1px solid #d6d9de;
+  border-radius: 8px;
+  padding: 12px;
+  font-size: 14px;
+  color: #00212c;
+  min-height: 90px;
+  white-space: pre-wrap;
+}
+
+.resumeLink {
+  display: inline-block;
+  color: #007ca6;
+  font-size: 14px;
+  text-decoration: underline;
+  padding: 8px 0;
+}
+
+.scheduleBtn {
+  display: block;
+  margin: 32px auto 0;
+  background: #007ca6;
+  color: #ffffff;
+  border: none;
+  border-radius: 28px;
+  padding: 16px 48px;
+  font-size: 18px;
+  cursor: pointer;
+}
+
+.scheduleBtn:hover {
+  background: #006a8f;
+}
