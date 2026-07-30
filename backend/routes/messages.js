@@ -5,24 +5,29 @@ import Message from "../models/Message.js";
 import User from "../models/User.js";
 import Student from "../models/Student.js";
 import Professional from "../models/Professional.js";
+import Meeting from "../models/Meeting.js";
 import { sendNewMessageEmail } from "../utils/mailer.js";
 import { requireAuth } from "../middleware/auth.js";
 
-// Issue #18 - Backend Messaging Functionality
+// Issues #18 (backend) and #28 (who may message whom)
 //
 //   POST /api/conversations/open            -> open (find or create) a conversation
 //   GET  /api/conversations                 -> inbox: every conversation you're in
+//   GET  /api/conversations/contacts        -> who you're allowed to start a chat with
 //   GET  /api/conversations/:id/messages    -> full message history (marks as read)
 //   POST /api/conversations/:id/messages    -> send a new message (emails the other person)
 //   POST /api/conversations/:id/read        -> mark a conversation as read
 //
-// The rule "you can only message people you've had a meeting with" is enforced
-// by checking the team's meetings collection (see the MEETING INTEGRATION
-// section below). Messaging never creates or edits meetings.
+// Messaging never creates or edits meetings; it only reads them to decide who
+// is allowed to talk to whom.
 
 const router = express.Router();
 
 const NOTIFY_THROTTLE_MS = 60 * 60 * 1000; // one email per hour per person per thread
+
+// A cancelled meeting doesn't earn you the right to message someone, so only
+// these statuses count when we look for a shared meeting.
+const ACTIVE_MEETING_STATUSES = ["scheduled", "completed"];
 
 // ---------------------------------------------------------------------------
 // small helpers
@@ -37,24 +42,46 @@ function toObjectId(id) {
   return null;
 }
 
-// which side of the conversation is this user? returns "student", "professional", or null
-function roleInConversation(conversation, userId) {
-  const id = String(userId);
-  if (String(conversation.student) === id) return "student";
-  if (String(conversation.professional) === id) return "professional";
-  return null;
+// Student and Professional documents both store the owning account id in
+// `userId` (required) and `user` (older documents), so match either.
+const profileLink = (userId) => ({ $or: [{ userId }, { user: userId }] });
+
+// the account id that owns a profile document
+const ownerOf = (profile) => {
+  const id = profile?.userId ?? profile?.user;
+  return id ? String(id) : null;
+};
+
+// Read a value out of readStatus / lastNotifiedAt. These are Mongoose Maps on a
+// full document but plain objects once .lean() is used, so handle both shapes.
+function timestampFor(mapLike, userId) {
+  if (!mapLike) return null;
+  const key = String(userId);
+  const value = typeof mapLike.get === "function" ? mapLike.get(key) : mapLike[key];
+  return value ?? null;
+}
+
+function isParticipant(conversation, userId) {
+  return (conversation.participants || []).some(
+    (p) => String(p) === String(userId)
+  );
+}
+
+function otherParticipantId(conversation, userId) {
+  const other = (conversation.participants || []).find(
+    (p) => String(p) !== String(userId)
+  );
+  return other ? String(other) : null;
 }
 
 // look up a friendly name/photo for a user. Names live on the Student /
-// Professional profile documents; if there's no profile yet we fall back to
-// the account email so the inbox still has something to show.
+// Professional profile documents; admins have no profile, so we fall back to
+// the account email and the inbox still has something to show.
 async function resolveParticipant(userId) {
-  // profiles link back to the account via `userId` (and older docs via `user`)
-  const link = { $or: [{ userId }, { user: userId }] };
   const [user, student, professional] = await Promise.all([
     User.findById(userId).lean(),
-    Student.findOne(link).lean(),
-    Professional.findOne(link).lean(),
+    Student.findOne(profileLink(userId)).lean(),
+    Professional.findOne(profileLink(userId)).lean(),
   ]);
   const profile = student || professional;
   return {
@@ -62,15 +89,14 @@ async function resolveParticipant(userId) {
     name: profile?.name || user?.email || "Unknown user",
     email: user?.email || null,
     role: user?.role || null,
-    profilePicture: profile?.profilePicture || "",
+    profilePicture: profile?.profilePicture || profile?.photo || "",
   };
 }
 
 // how many messages in this thread the user hasn't seen yet
 async function unreadCount(conversation, userId) {
-  const role = roleInConversation(conversation, userId);
-  if (!role) return 0;
-  const lastRead = conversation.readStatus?.[role];
+  if (!isParticipant(conversation, userId)) return 0;
+  const lastRead = timestampFor(conversation.readStatus, userId);
   const query = {
     conversation: conversation._id,
     sender: { $ne: toObjectId(userId) },
@@ -79,113 +105,134 @@ async function unreadCount(conversation, userId) {
   return Message.countDocuments(query);
 }
 
+const shapeConversation = (conversation) => ({
+  id: String(conversation._id),
+  meetingId: conversation.meeting ? String(conversation.meeting) : null,
+  lastMessage: conversation.lastMessage,
+  lastMessageAt: conversation.lastMessageAt,
+  createdAt: conversation.createdAt,
+  updatedAt: conversation.updatedAt,
+});
+
 // ---------------------------------------------------------------------------
-// MEETING INTEGRATION  (the ONE place messaging touches the meetings module)
+// MEETING INTEGRATION
 //
-// We read the `meetings` collection directly instead of importing a Meeting
-// model, so this file works no matter how the scheduler team finishes their
-// module and doesn't crash if the collection doesn't exist yet.
-//
-// IMPORTANT: a meeting document points at the STUDENT / PROFESSIONAL PROFILE
-// documents, not at the User accounts. Conversations, on the other hand, are
-// keyed by User account ids (that's what auth gives us and what emails need).
-// So here we translate between the two:
-//   - readMeetingPair()  -> pulls the two PROFILE ids out of a meeting
-//   - userIdFor*Profile()-> profile id  ->  User account id
-//   - *ProfileIdForUser()-> User account id  ->  profile id
-//
-// The scheduler branches currently disagree on field names
-// (`student`/`professional` vs `studentID`/`professionalID`), so we accept
-// both. If they settle on something else, adjust readMeetingPair / the
-// findSharedMeeting query below — that's the only place that needs to change.
+// A meeting document points at the STUDENT / PROFESSIONAL PROFILE documents,
+// not at the User accounts. Conversations are keyed by User account ids (that's
+// what auth gives us and what emails need), so we translate between the two.
 // ---------------------------------------------------------------------------
 
-// pull the student + professional PROFILE ids out of a raw meeting document
-function readMeetingPair(meeting) {
-  if (!meeting) return null;
-  const student = meeting.student ?? meeting.studentID ?? meeting.studentId ?? null;
-  const professional =
-    meeting.professional ?? meeting.professionalID ?? meeting.professionalId ?? null;
-  if (student && professional) {
-    return {
-      studentProfile: String(student),
-      professionalProfile: String(professional),
-    };
-  }
-  return null;
-}
-
-// profile id -> the User account that owns it
-async function userIdForStudentProfile(profileId) {
-  const s = await Student.findById(profileId).select("userId user").lean();
-  const id = s?.userId ?? s?.user;
-  return id ? String(id) : null;
-}
-async function userIdForProfessionalProfile(profileId) {
-  const p = await Professional.findById(profileId).select("userId user").lean();
-  const id = p?.userId ?? p?.user;
-  return id ? String(id) : null;
-}
-
-// User account id -> their profile id (null if they don't have that profile)
-async function studentProfileIdForUser(userId) {
-  const s = await Student.findOne({ $or: [{ userId }, { user: userId }] })
-    .select("_id")
-    .lean();
-  return s?._id ?? null;
-}
-async function professionalProfileIdForUser(userId) {
-  const p = await Professional.findOne({ $or: [{ userId }, { user: userId }] })
-    .select("_id")
-    .lean();
-  return p?._id ?? null;
-}
-
-// the raw meetings collection (no schema needed)
-function meetingsCollection() {
-  return mongoose.connection.collection("meetings");
-}
-
-// find a single meeting document by its id
-async function findMeetingById(meetingId) {
-  const oid = toObjectId(meetingId);
-  if (!oid) return null;
-  return meetingsCollection().findOne({ _id: oid });
-}
-
-// find any meeting shared by these two USER accounts. We first resolve each
-// account to its student/professional profile, then look for a meeting linking
-// those profiles (either user could be the student).
+// find a meeting shared by these two accounts, whichever way round they are
 async function findSharedMeeting(userAId, userBId) {
-  const [aStudent, bStudent, aProf, bProf] = await Promise.all([
-    studentProfileIdForUser(userAId),
-    studentProfileIdForUser(userBId),
-    professionalProfileIdForUser(userAId),
-    professionalProfileIdForUser(userBId),
+  const [aStudent, bStudent, aProfessional, bProfessional] = await Promise.all([
+    Student.findOne(profileLink(userAId)).select("_id").lean(),
+    Student.findOne(profileLink(userBId)).select("_id").lean(),
+    Professional.findOne(profileLink(userAId)).select("_id").lean(),
+    Professional.findOne(profileLink(userBId)).select("_id").lean(),
   ]);
 
-  const studentIds = [aStudent, bStudent].filter(Boolean).map(toObjectId);
-  const professionalIds = [aProf, bProf].filter(Boolean).map(toObjectId);
+  const studentIds = [aStudent, bStudent].filter(Boolean).map((p) => p._id);
+  const professionalIds = [aProfessional, bProfessional]
+    .filter(Boolean)
+    .map((p) => p._id);
+
   if (studentIds.length === 0 || professionalIds.length === 0) return null;
 
-  return meetingsCollection().findOne({
-    $or: [
-      { student: { $in: studentIds }, professional: { $in: professionalIds } },
-      { studentID: { $in: studentIds }, professionalID: { $in: professionalIds } },
-    ],
-  });
+  return Meeting.findOne({
+    student: { $in: studentIds },
+    professional: { $in: professionalIds },
+    status: { $in: ACTIVE_MEETING_STATUSES },
+  }).lean();
 }
 
-// given a meeting document, return the two participants as USER account ids
+// given a meeting, return its two participants as USER account ids
 async function meetingUserPair(meeting) {
-  const pair = readMeetingPair(meeting);
-  if (!pair) return null;
-  const [studentUserId, professionalUserId] = await Promise.all([
-    userIdForStudentProfile(pair.studentProfile),
-    userIdForProfessionalProfile(pair.professionalProfile),
+  if (!meeting?.student || !meeting?.professional) return null;
+
+  const [student, professional] = await Promise.all([
+    Student.findById(meeting.student).select("userId user").lean(),
+    Professional.findById(meeting.professional).select("userId user").lean(),
   ]);
+
+  const studentUserId = ownerOf(student);
+  const professionalUserId = ownerOf(professional);
   if (!studentUserId || !professionalUserId) return null;
+
   return { studentUserId, professionalUserId };
+}
+
+// ---------------------------------------------------------------------------
+// WHO MAY MESSAGE WHOM  (issue #28)
+//
+//   anyone       <-> admin        : always, admins are staff support
+//   professional <-> professional : always
+//   student      <-> professional : only if they share a booked/completed meeting
+//   student      <-> student      : never
+// ---------------------------------------------------------------------------
+async function canMessage(me, them) {
+  if (!me || !them) {
+    return { allowed: false, status: 404, reason: "User not found." };
+  }
+  if (String(me._id) === String(them._id)) {
+    return { allowed: false, status: 400, reason: "You cannot message yourself." };
+  }
+  if (me.role === "admin" || them.role === "admin") {
+    return { allowed: true };
+  }
+  if (me.role === "professional" && them.role === "professional") {
+    return { allowed: true };
+  }
+
+  const pairing = [me.role, them.role].sort().join("+");
+  if (pairing === "professional+student") {
+    const meeting = await findSharedMeeting(me._id, them._id);
+    if (!meeting) {
+      return {
+        allowed: false,
+        status: 403,
+        reason: "You can only message people you have a meeting with.",
+      };
+    }
+    return { allowed: true, meeting };
+  }
+
+  return {
+    allowed: false,
+    status: 403,
+    reason: "Students can only message professionals they have met with.",
+  };
+}
+
+// Find the single thread for a pair, creating it if it doesn't exist yet.
+async function findOrCreateConversation(userAId, userBId, meetingId) {
+  const pairKey = Conversation.buildPairKey(userAId, userBId);
+
+  const existing = await Conversation.findOne({ pairKey });
+  if (existing) {
+    // if we opened from a meeting and didn't know about one before, record it
+    if (!existing.meeting && meetingId) {
+      existing.meeting = meetingId;
+      await existing.save();
+    }
+    return existing;
+  }
+
+  // keep participants in the same order as pairKey so the pair is canonical
+  const participants = [toObjectId(userAId), toObjectId(userBId)].sort((a, b) =>
+    String(a).localeCompare(String(b))
+  );
+
+  try {
+    return await Conversation.create({
+      participants,
+      pairKey,
+      meeting: meetingId || undefined,
+    });
+  } catch (err) {
+    // two "open" calls raced each other; the other one won, so use its thread
+    if (err?.code === 11000) return Conversation.findOne({ pairKey });
+    throw err;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -193,90 +240,76 @@ async function meetingUserPair(meeting) {
 // ---------------------------------------------------------------------------
 
 // POST /api/conversations/open
-// Body: { meetingId } (preferred - opened from a meeting card) OR { withUserId }.
-// Finds the existing conversation for the pair, or creates one after confirming
-// the two users actually share a meeting.
+// Body: { meetingId } (opened from a meeting card) OR { withUserId } (opened
+// from the "+" new-message picker). Finds the existing thread or creates one
+// after confirming the two people are allowed to talk.
 router.post("/open", requireAuth, async (req, res) => {
   try {
-    const me = req.userId;
     const { meetingId, withUserId } = req.body ?? {};
+    const me = await User.findById(req.userId).lean();
+    if (!me) return res.status(404).json({ message: "User not found." });
 
-    let studentId;
-    let professionalId;
-    let meeting = null;
+    let conversation;
+    let otherId;
 
     if (meetingId) {
-      meeting = await findMeetingById(meetingId);
+      const meeting = await Meeting.findById(meetingId).lean();
       if (!meeting) {
         return res.status(404).json({ message: "Meeting not found." });
       }
-    } else if (withUserId) {
-      meeting = await findSharedMeeting(me, withUserId);
-      if (!meeting) {
-        return res.status(403).json({
-          message: "You can only message people you have a meeting with.",
-        });
+
+      const pair = await meetingUserPair(meeting);
+      if (!pair) {
+        return res
+          .status(400)
+          .json({ message: "Could not resolve the meeting's participants." });
       }
+
+      const { studentUserId, professionalUserId } = pair;
+      if (
+        String(req.userId) !== studentUserId &&
+        String(req.userId) !== professionalUserId
+      ) {
+        return res
+          .status(403)
+          .json({ message: "You are not a participant of this meeting." });
+      }
+
+      otherId =
+        String(req.userId) === studentUserId ? professionalUserId : studentUserId;
+      conversation = await findOrCreateConversation(
+        req.userId,
+        otherId,
+        meeting._id
+      );
+    } else if (withUserId) {
+      if (!toObjectId(withUserId)) {
+        return res.status(400).json({ message: "Invalid user id." });
+      }
+
+      const them = await User.findById(withUserId).lean();
+      const verdict = await canMessage(me, them);
+      if (!verdict.allowed) {
+        return res.status(verdict.status).json({ message: verdict.reason });
+      }
+
+      otherId = String(withUserId);
+      conversation = await findOrCreateConversation(
+        req.userId,
+        otherId,
+        verdict.meeting?._id
+      );
     } else {
       return res
         .status(400)
         .json({ message: "Provide a meetingId or a withUserId." });
     }
 
-    // translate the meeting's profile ids into the two User account ids
-    const pair = await meetingUserPair(meeting);
-    if (!pair) {
-      return res
-        .status(400)
-        .json({ message: "Could not resolve the meeting's participants." });
-    }
-    studentId = pair.studentUserId;
-    professionalId = pair.professionalUserId;
-
-    // the requester must be one of the two people in the meeting
-    if (String(me) !== String(studentId) && String(me) !== String(professionalId)) {
-      return res
-        .status(403)
-        .json({ message: "You are not a participant of this meeting." });
-    }
-
-    // find or create the single thread for this pair
-    let conversation = await Conversation.findOne({
-      student: studentId,
-      professional: professionalId,
-    });
-
-    if (!conversation) {
-      conversation = await Conversation.create({
-        student: studentId,
-        professional: professionalId,
-        meeting: meeting?._id,
-      });
-    }
-
-    const other =
-      String(me) === String(conversation.student)
-        ? conversation.professional
-        : conversation.student;
-
     return res.status(200).json({
-      conversation: {
-        id: String(conversation._id),
-        meetingId: conversation.meeting ? String(conversation.meeting) : null,
-        lastMessage: conversation.lastMessage,
-        lastMessageAt: conversation.lastMessageAt,
-        createdAt: conversation.createdAt,
-        updatedAt: conversation.updatedAt,
-      },
-      participant: await resolveParticipant(other),
+      conversation: shapeConversation(conversation),
+      participant: await resolveParticipant(otherId),
     });
   } catch (err) {
-    // duplicate-key from two "open" calls racing: just fetch the existing one
-    if (err?.code === 11000) {
-      return res
-        .status(409)
-        .json({ message: "Conversation already exists. Please retry." });
-    }
     console.log("OPEN CONVERSATION ERROR:", err);
     return res
       .status(500)
@@ -291,28 +324,21 @@ router.get("/", requireAuth, async (req, res) => {
   try {
     const me = toObjectId(req.userId);
 
-    const conversations = await Conversation.find({
-      $or: [{ student: me }, { professional: me }],
-    })
+    const conversations = await Conversation.find({ participants: me })
       .sort({ lastMessageAt: -1, updatedAt: -1 })
       .lean();
 
     const items = await Promise.all(
-      conversations.map(async (c) => {
-        const otherId =
-          String(req.userId) === String(c.student) ? c.professional : c.student;
+      conversations.map(async (conversation) => {
+        const otherId = otherParticipantId(conversation, req.userId);
         const [participant, unread] = await Promise.all([
-          resolveParticipant(otherId),
-          unreadCount(c, req.userId),
+          otherId ? resolveParticipant(otherId) : null,
+          unreadCount(conversation, req.userId),
         ]);
         return {
-          id: String(c._id),
-          meetingId: c.meeting ? String(c.meeting) : null,
+          ...shapeConversation(conversation),
           participant,
-          lastMessage: c.lastMessage,
-          lastMessageAt: c.lastMessageAt,
           unreadCount: unread,
-          updatedAt: c.updatedAt,
         };
       })
     );
@@ -326,18 +352,130 @@ router.get("/", requireAuth, async (req, res) => {
   }
 });
 
+// GET /api/conversations/contacts
+// Powers the "+" new-message picker: everyone the logged-in user is allowed to
+// start a conversation with, and why.
+//
+// NOTE: declared before the "/:id/..." routes so "contacts" is never read as an id.
+router.get("/contacts", requireAuth, async (req, res) => {
+  try {
+    const me = await User.findById(req.userId).lean();
+    if (!me) return res.status(404).json({ message: "User not found." });
+
+    const contacts = [];
+    const seenUserIds = new Set([String(me._id)]);
+
+    const add = (userId, name, role, profilePicture, reason) => {
+      const id = String(userId);
+      if (!userId || seenUserIds.has(id)) return;
+      seenUserIds.add(id);
+      contacts.push({
+        id,
+        name: name || "Unknown user",
+        role,
+        profilePicture: profilePicture || "",
+        reason,
+      });
+    };
+
+    if (me.role === "student") {
+      // professionals this student has met, or is about to meet
+      const myProfile = await Student.findOne(profileLink(me._id))
+        .select("_id")
+        .lean();
+
+      if (myProfile) {
+        const meetings = await Meeting.find({
+          student: myProfile._id,
+          status: { $in: ACTIVE_MEETING_STATUSES },
+        })
+          .sort({ date: -1 })
+          .lean();
+
+        const now = new Date();
+        const professionalIds = [
+          ...new Set(meetings.map((m) => String(m.professional))),
+        ];
+
+        const professionals = await Professional.find({
+          _id: { $in: professionalIds.map(toObjectId).filter(Boolean) },
+        }).lean();
+
+        const byId = new Map(professionals.map((p) => [String(p._id), p]));
+
+        for (const meeting of meetings) {
+          const professional = byId.get(String(meeting.professional));
+          if (!professional) continue;
+          add(
+            ownerOf(professional),
+            professional.name,
+            "professional",
+            professional.profilePicture || professional.photo,
+            new Date(meeting.date) > now ? "Upcoming meeting" : "Previous meeting"
+          );
+        }
+      }
+    } else if (me.role === "professional") {
+      // every other professional on the platform
+      const professionals = await Professional.find({}).lean();
+      for (const professional of professionals) {
+        add(
+          ownerOf(professional),
+          professional.name,
+          "professional",
+          professional.profilePicture || professional.photo,
+          professional.jobTitle || "Professional"
+        );
+      }
+    } else if (me.role === "admin") {
+      // admins support everyone, so they can reach anybody
+      const [students, professionals] = await Promise.all([
+        Student.find({}).lean(),
+        Professional.find({}).lean(),
+      ]);
+      for (const student of students) {
+        add(ownerOf(student), student.name, "student", student.profilePicture, "Student");
+      }
+      for (const professional of professionals) {
+        add(
+          ownerOf(professional),
+          professional.name,
+          "professional",
+          professional.profilePicture || professional.photo,
+          professional.jobTitle || "Professional"
+        );
+      }
+    }
+
+    // everyone can always reach an admin
+    const admins = await User.find({ role: "admin" }).lean();
+    for (const admin of admins) {
+      add(admin._id, admin.email, "admin", "", "Admin");
+    }
+
+    return res.json({ contacts });
+  } catch (err) {
+    console.log("CONTACTS ERROR:", err);
+    return res
+      .status(500)
+      .json({ message: "Server error. Please try again later." });
+  }
+});
+
 // GET /api/conversations/:id/messages
 // Full history (oldest -> newest) for a conversation you belong to. Viewing the
 // messages marks the thread as read for you.
 router.get("/:id/messages", requireAuth, async (req, res) => {
   try {
+    if (!toObjectId(req.params.id)) {
+      return res.status(400).json({ message: "Invalid conversation id." });
+    }
+
     const conversation = await Conversation.findById(req.params.id);
     if (!conversation) {
       return res.status(404).json({ message: "Conversation not found." });
     }
-
-    const role = roleInConversation(conversation, req.userId);
-    if (!role) {
+    if (!isParticipant(conversation, req.userId)) {
       return res
         .status(403)
         .json({ message: "You are not part of this conversation." });
@@ -348,7 +486,7 @@ router.get("/:id/messages", requireAuth, async (req, res) => {
       .lean();
 
     // mark read: record that this user has now seen everything up to "now"
-    conversation.readStatus[role] = new Date();
+    conversation.readStatus.set(String(req.userId), new Date());
     await conversation.save();
 
     return res.json({
@@ -383,14 +521,15 @@ router.post("/:id/messages", requireAuth, async (req, res) => {
         .status(400)
         .json({ message: "Message is too long (5000 characters max)." });
     }
+    if (!toObjectId(req.params.id)) {
+      return res.status(400).json({ message: "Invalid conversation id." });
+    }
 
     const conversation = await Conversation.findById(req.params.id);
     if (!conversation) {
       return res.status(404).json({ message: "Conversation not found." });
     }
-
-    const role = roleInConversation(conversation, req.userId);
-    if (!role) {
+    if (!isParticipant(conversation, req.userId)) {
       return res
         .status(403)
         .json({ message: "You are not part of this conversation." });
@@ -407,22 +546,19 @@ router.post("/:id/messages", requireAuth, async (req, res) => {
     conversation.lastMessage = content;
     conversation.lastMessageAt = now;
     conversation.lastSender = req.userId;
-    conversation.readStatus[role] = now;
+    conversation.readStatus.set(String(req.userId), now);
 
-    // figure out who should be notified
-    const recipientRole = role === "student" ? "professional" : "student";
-    const recipientId =
-      recipientRole === "student"
-        ? conversation.student
-        : conversation.professional;
+    const recipientId = otherParticipantId(conversation, req.userId);
 
     // throttle: only email if we haven't emailed this recipient in the last hour
-    const lastNotified = conversation.lastNotifiedAt?.[recipientRole];
+    const lastNotified = timestampFor(conversation.lastNotifiedAt, recipientId);
     const shouldNotify =
-      !lastNotified || now.getTime() - new Date(lastNotified).getTime() >= NOTIFY_THROTTLE_MS;
+      recipientId &&
+      (!lastNotified ||
+        now.getTime() - new Date(lastNotified).getTime() >= NOTIFY_THROTTLE_MS);
 
     if (shouldNotify) {
-      conversation.lastNotifiedAt[recipientRole] = now;
+      conversation.lastNotifiedAt.set(String(recipientId), now);
     }
 
     await conversation.save();
@@ -467,19 +603,21 @@ router.post("/:id/messages", requireAuth, async (req, res) => {
 // Explicitly mark a conversation as read (e.g. when opening it in the UI).
 router.post("/:id/read", requireAuth, async (req, res) => {
   try {
+    if (!toObjectId(req.params.id)) {
+      return res.status(400).json({ message: "Invalid conversation id." });
+    }
+
     const conversation = await Conversation.findById(req.params.id);
     if (!conversation) {
       return res.status(404).json({ message: "Conversation not found." });
     }
-
-    const role = roleInConversation(conversation, req.userId);
-    if (!role) {
+    if (!isParticipant(conversation, req.userId)) {
       return res
         .status(403)
         .json({ message: "You are not part of this conversation." });
     }
 
-    conversation.readStatus[role] = new Date();
+    conversation.readStatus.set(String(req.userId), new Date());
     await conversation.save();
 
     return res.json({ message: "Conversation marked as read." });
