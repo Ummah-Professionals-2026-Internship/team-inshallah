@@ -346,7 +346,32 @@ app.get("/api/student/profile", requireAuth, async (req, res) => {
     res.status(500).json({ message: "Server error. Please try again later." });
   }
 });
+// ===== GET ALL STUDENTS (for admin view) =====
+app.get("/api/students", requireAuth, async (req, res) => {
+  try {
+    const user = await User.findById(req.userId);
+    if (!user || user.role !== "admin") {
+      return res.status(403).json({ message: "Only admins can view all students." });
+    }
 
+    const students = await Student.find().populate("user", "email");
+
+    const cardData = await Promise.all(
+      students.map(async (student) => ({
+        id: student._id,
+        name: student.name,
+        jobName: student.desiredFutureCareer,
+        summary: student.otherInformation || `${student.major} major, interested in ${student.industry}.`,
+        photo: await getSignedFileUrl(student.profilePicture),
+      }))
+    );
+
+    res.json({ students: cardData });
+  } catch (err) {
+    console.log("GET ALL STUDENTS ERROR:", err);
+    res.status(500).json({ message: "Server error. Please try again later." });
+  }
+});
 // ===== UPDATE STUDENT PROFILE =====
 app.put(
   "/api/student/profile",
@@ -1007,6 +1032,10 @@ app.get("/api/calendar/google/busy", requireAuth, async (req, res) => {
 
     const calendar = google.calendar({ version: "v3", auth: userClient });
 
+    // pull every calendar the user has access to, not just "primary"
+    const calendarList = await calendar.calendarList.list();
+    const calendarIds = calendarList.data.items.map((cal) => cal.id);
+
     const now = new Date();
     const oneMonthOut = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
 
@@ -1014,11 +1043,16 @@ app.get("/api/calendar/google/busy", requireAuth, async (req, res) => {
       requestBody: {
         timeMin: now.toISOString(),
         timeMax: oneMonthOut.toISOString(),
-        items: [{ id: connection.calendarId }],
+        items: calendarIds.map((id) => ({ id })),
       },
     });
 
-    const busyTimes = response.data.calendars[connection.calendarId].busy;
+    // merge busy blocks from every calendar into one flat list
+    const busyTimes = [];
+    for (const calId of calendarIds) {
+      const calBusy = response.data.calendars[calId]?.busy || [];
+      busyTimes.push(...calBusy);
+    }
 
     await CalendarConnection.findByIdAndUpdate(connection._id, {
       lastSynced: new Date(),
