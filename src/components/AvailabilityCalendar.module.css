@@ -253,3 +253,39 @@
 .blockRowInline .blockTime {
     margin: 0;
 }
+
+.loadErrorText {
+    text-align: center;
+    font-size: 12px;
+    color: #b02a37;
+    margin: 8px 0 0;
+}
+
+
+.blockColorA {
+    background: #e8f4f8;
+    border: 1px solid #007ca6;
+}
+.blockColorA .blockTitle,
+.blockColorA .blockTime {
+    color: #003f55;
+}
+
+.blockColorB {
+    background: #eef5e8;
+    border: 1px solid #4a9e4a;
+}
+.blockColorB .blockTitle,
+.blockColorB .blockTime {
+    color: #2a5e2a;
+}
+
+.blockColorC {
+    background: #f5ede8;
+    border: 1px solid #c07040;
+}
+
+.blockColorC .blockTitle,
+.blockColorC .blockTime {
+    color: #7a4020;
+}

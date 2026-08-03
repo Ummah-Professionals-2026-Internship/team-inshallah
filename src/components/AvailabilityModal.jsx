@@ -17,21 +17,19 @@ function formatHour12(h) {
 }
 
 const TIMEZONE_OPTIONS = [
-    "(GMT-12:00) International Date Line West",
-    "(GMT-11:00) Samoa Standard Time",
-    "(GMT-10:00) Hawaii-Aleutian Standard Time",
-    "(GMT-09:30) Marquesas Islands Time",
-    "(GMT-09:00) Alaska Standard Time",
-    "(GMT-08:00) Pacific Standard Time",
-    "(GMT-07:00) Mountain Standard Time",
-    "(GMT-06:00) Central Standard Time",
-    "(GMT-05:00) Eastern Standard Time",
-    "(GMT-04:00) Atlantic Standard Time",
-    "(GMT+00:00) Greenwich Mean Time",
-    "(GMT+01:00) Central European Time",
-    "(GMT+03:00) East Africa Time",
-    "(GMT+04:00) Gulf Standard Time",
-    "(GMT+05:00) Pakistan Standard Time",
+    { value: "Pacific/Midway", label: "(GMT-11:00) Samoa Standard Time" },
+    { value: "Pacific/Honolulu", label: "(GMT-10:00) Hawaii-Aleutian Standard Time" },
+    { value: "America/Anchorage", label: "(GMT-09:00) Alaska Standard Time" },
+    { value: "America/Los_Angeles", label: "(GMT-08:00) Pacific Time" },
+    { value: "America/Denver", label: "(GMT-07:00) Mountain Time" },
+    { value: "America/Chicago", label: "(GMT-06:00) Central Time" },
+    { value: "America/New_York", label: "(GMT-05:00) Eastern Time" },
+    { value: "America/Halifax", label: "(GMT-04:00) Atlantic Time" },
+    { value: "UTC", label: "(GMT+00:00) Greenwich Mean Time" },
+    { value: "Europe/Paris", label: "(GMT+01:00) Central European Time" },
+    { value: "Africa/Nairobi", label: "(GMT+03:00) East Africa Time" },
+    { value: "Asia/Dubai", label: "(GMT+04:00) Gulf Standard Time" },
+    { value: "Asia/Karachi", label: "(GMT+05:00) Pakistan Standard Time" },
 ];
 
 function dateKey(date) {
@@ -249,7 +247,7 @@ export default function AvailabilityModal({ onClose, onContinue }) {
                     Change Availability
                 </button>
 
-                <div className={styles.timezoneSection}>
+              <div className={styles.timezoneSection}>
                     <label className={styles.timezoneLabel}>Timezone</label>
                     <div className={styles.timezoneRow}>
                         <select
@@ -258,8 +256,11 @@ export default function AvailabilityModal({ onClose, onContinue }) {
                             onChange={(e) => setTimezone(e.target.value)}
                         >
                             <option value="">Select Timezone</option>
+                            {!TIMEZONE_OPTIONS.some((tz) => tz.value === timezone) && timezone && (
+                                <option value={timezone}>{timezone}</option>
+                            )}
                             {TIMEZONE_OPTIONS.map((tz) => (
-                                <option key={tz} value={tz}>{tz}</option>
+                                <option key={tz.value} value={tz.value}>{tz.label}</option>
                             ))}
                         </select>
                         <button
