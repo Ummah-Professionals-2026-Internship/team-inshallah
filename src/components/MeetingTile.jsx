@@ -1,5 +1,5 @@
 import styles from "./MeetingTile.module.css";
-import chatIcon from "../assets/chaticon.svg";
+import chatIcon from "../assets/meetingtilechaticon.svg";
 import joinMeetingButton from "../assets/joinmeetingbutton.svg";
 import feedbackIcon from "../assets/feedbackicon.svg";
 
