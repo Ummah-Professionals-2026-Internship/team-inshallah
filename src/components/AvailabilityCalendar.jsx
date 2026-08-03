@@ -2,11 +2,14 @@ import { useState, useEffect, useMemo } from "react";
 import Dashboard from "./Dashboard";
 import styles from "./AvailabilityCalendar.module.css";
 import SyncCalendar from "./SyncCalendar";
+import { API_BASE_URL } from "../config";
+const API = API_BASE_URL;
 
 const SLOT_MINUTES = 30;
 const SLOT_HEIGHT = 28;
 const DAYS_PER_PAGE = 5;
 const WEEKDAY_ORDER = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+const API = "http://localhost:5050";
 
 const CALENDAR_NAV_LINKS = [
     { label: "Add Calendar" },
@@ -25,6 +28,79 @@ function minutesToLabel(mins) {
     let h12 = h24 % 12;
     if (h12 === 0) h12 = 12;
     return `${h12}:${String(m).padStart(2, "0")} ${period}`;
+}
+
+function minutesToHHMM(mins) {
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+function dayKeyToISODate(dayKey) {
+    const [y, m, d] = dayKey.split("-").map(Number);
+    return `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+}
+
+function isoDateToDayKey(isoDate) {
+    const [y, m, d] = isoDate.split("-").map(Number);
+    return `${y}-${m - 1}-${d}`;
+}
+
+function weekdayNameToDayOfWeek(name) {
+    const mondayIdx = WEEKDAY_ORDER.indexOf(name);
+    return (mondayIdx + 1) % 7;
+}
+function dayOfWeekToWeekdayName(dow) {
+    const mondayIdx = (dow + 6) % 7;
+    return WEEKDAY_ORDER[mondayIdx];
+}
+
+// returns the next real calendar date (today or later) that falls on the given weekday name
+function nextDateForWeekday(weekdayName) {
+    const targetMondayIdx = WEEKDAY_ORDER.indexOf(weekdayName); // 0=Monday
+    const today = new Date();
+    const todayMondayIdx = (today.getDay() + 6) % 7; // convert JS Sunday-first to Monday-first
+    const diff = (targetMondayIdx - todayMondayIdx + 7) % 7;
+    const result = new Date(today);
+    result.setDate(today.getDate() + diff);
+    return result;
+}
+
+// converts an "HH:MM" wall-clock time from one IANA zone to another, anchored
+// to a specific date (needed since the offset between zones can shift by date/DST)
+function convertHHMMBetweenZones(dateForContext, hhmm, fromTz, toTz) {
+    if (fromTz === toTz || !fromTz || !toTz) return hhmm;
+    const [h, m] = hhmm.split(":").map(Number);
+    const utc = zonedTimeToUtc(
+        dateForContext.getFullYear(), dateForContext.getMonth(), dateForContext.getDate(),
+        h, m, fromTz
+    );
+    const fmt = new Intl.DateTimeFormat("en-US", {
+        timeZone: toTz,
+        hourCycle: "h23",
+        hour: "2-digit",
+        minute: "2-digit",
+    });
+    const parts = Object.fromEntries(fmt.formatToParts(utc).map((p) => [p.type, p.value]));
+    return `${parts.hour}:${parts.minute}`;
+}
+
+// returns the UTC Date corresponding to a given wall-clock time in `timeZone`
+function zonedTimeToUtc(year, month, day, hour, minute, timeZone) {
+    const naiveUtc = new Date(Date.UTC(year, month, day, hour, minute));
+    const fmt = new Intl.DateTimeFormat("en-US", {
+        timeZone,
+        hourCycle: "h23",
+        year: "numeric", month: "2-digit", day: "2-digit",
+        hour: "2-digit", minute: "2-digit", second: "2-digit",
+    });
+    const parts = Object.fromEntries(fmt.formatToParts(naiveUtc).map((p) => [p.type, p.value]));
+    const asIfUtc = Date.UTC(
+        Number(parts.year), Number(parts.month) - 1, Number(parts.day),
+        Number(parts.hour), Number(parts.minute), Number(parts.second)
+    );
+    const offset = asIfUtc - naiveUtc.getTime();
+    return new Date(naiveUtc.getTime() - offset);
 }
 
 function buildDayColumns(availability) {
@@ -66,12 +142,69 @@ export default function AvailabilityCalendar({ availability, onClose, onSave, us
         [days, page]
     );
 
-    // finalized blocks: { id, dayKey, startIdx, endIdx }
     const [blocks, setBlocks] = useState([]);
     const [busy, setBusy] = useState(new Set());
     const [syncing, setSyncing] = useState(false);
+    const [saving, setSaving] = useState(false);
+    const [loadError, setLoadError] = useState("");
+    const [saveError, setSaveError] = useState("");
     const [showSyncModal, setShowSyncModal] = useState(false);
-    const [dragging, setDragging] = useState(null); // { dayKey, startIdx, hoverIdx }
+    const [dragging, setDragging] = useState(null);
+
+    const slotIndexFromHHMM = (hhmm) => {
+        const mins = timeToMinutes(hhmm);
+        const idx = slots.findIndex((s) => s === mins);
+        return idx === -1 ? null : idx;
+    };
+    const slotIndexEndFromHHMM = (hhmm) => {
+        const mins = timeToMinutes(hhmm);
+        const idx = slots.findIndex((s) => s === mins);
+        if (idx !== -1) return idx;
+        if (mins === endMin) return slots.length;
+        return null;
+    };
+
+    useEffect(() => {
+        const token = localStorage.getItem("token");
+        if (!token) return;
+
+        fetch(`${API}/api/availability`, {
+            headers: { Authorization: `Bearer ${token}` },
+        })
+            .then((res) => (res.status === 404 ? null : res.json()))
+            .then((body) => {
+                const record = body?.availability;
+                if (!record?.availability) return;
+
+                const savedTz = record.timezone || "America/New_York";
+                const currentTz = availability?.timezone || savedTz;
+
+                const loaded = [];
+                for (const b of record.availability) {
+                    const dayKey =
+                        b.type === "specific" ? isoDateToDayKey(b.date) : dayOfWeekToWeekdayName(b.dayOfWeek);
+
+                    const contextDate = b.type === "specific" ? new Date(b.date) : new Date();
+
+                    const adjustedStart = convertHHMMBetweenZones(contextDate, b.start, savedTz, currentTz);
+                    const adjustedEnd = convertHHMMBetweenZones(contextDate, b.end, savedTz, currentTz);
+
+                    const startIdx = slotIndexFromHHMM(adjustedStart);
+                    const endIdx = slotIndexEndFromHHMM(adjustedEnd);
+                    if (startIdx === null || endIdx === null) continue;
+
+                    loaded.push({
+                        id: `${dayKey}-${b.start}-${Date.now()}-${Math.random()}`,
+                        dayKey,
+                        startIdx,
+                        endIdx,
+                    });
+                }
+                setBlocks(loaded);
+            })
+            .catch(() => setLoadError("Could not load your saved availability."));
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [slots.length, availability?.timezone]);
 
     const busyKey = (dayKey, slotStart) => `${dayKey}__${slotStart}`;
 
@@ -82,7 +215,6 @@ export default function AvailabilityCalendar({ availability, onClose, onSave, us
         return idx >= lo && idx <= hi;
     };
 
-    // drag allowed anywhere, can reselect over time
     const handleMouseDown = (dayKey, idx) => {
         setDragging({ dayKey, startIdx: idx, hoverIdx: idx });
     };
@@ -103,24 +235,18 @@ export default function AvailabilityCalendar({ availability, onClose, onSave, us
                 setBlocks((prev) => {
                     const dayBlocks = prev.filter((b) => b.dayKey === dayKey);
                     const otherDaysBlocks = prev.filter((b) => b.dayKey !== dayKey);
-
-                    // any block that overlaps OR touches the new range gets merged in
                     const merging = dayBlocks.filter((b) => b.startIdx <= hi && b.endIdx >= lo);
                     const untouched = dayBlocks.filter((b) => !merging.includes(b));
-
                     const mergedStart = Math.min(lo, ...merging.map((b) => b.startIdx));
                     const mergedEnd = Math.max(hi, ...merging.map((b) => b.endIdx));
-
                     const mergedBlock = {
                         id: merging.length > 0 ? merging[0].id : `${dayKey}-${Date.now()}`,
                         dayKey,
                         startIdx: mergedStart,
                         endIdx: mergedEnd,
                     };
-
                     return [...otherDaysBlocks, ...untouched, mergedBlock];
                 });
-
                 return null;
             });
         };
@@ -132,50 +258,111 @@ export default function AvailabilityCalendar({ availability, onClose, onSave, us
 
     const handleSyncCalendar = async (provider) => {
         setShowSyncModal(false);
+        if (provider === "manual") return;
+
+        const token = localStorage.getItem("token");
+        const popup = window.open("", "_blank", "width=500,height=650");
+
         setSyncing(true);
         try {
-            const res = await fetch("http://localhost:5050/api/professional/availability/sync", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    Authorization: `Bearer ${localStorage.getItem("token")}`,
-                },
-                body: JSON.stringify({ provider }),
+            const busyRes = await fetch(`${API}/api/calendar/${provider}/busy`, {
+                headers: { Authorization: `Bearer ${token}` },
             });
-            const data = await res.json().catch(() => ({}));
-            if (data.busySlots) {
-                setBusy(new Set(data.busySlots.map((b) => busyKey(b.dayKey, b.slot))));
+
+            if (busyRes.status === 404) {
+                const connectRes = await fetch(`${API}/api/calendar/${provider}/connect`, {
+                    headers: { Authorization: `Bearer ${token}` },
+                });
+                const { url } = await connectRes.json();
+                if (url && popup) {
+                    popup.location.href = url;
+                } else if (url) {
+                    window.open(url, "_blank");
+                }
+                setSyncing(false);
+                return;
             }
-        } catch {
-            // connecting backend next week
+
+            popup?.close();
+
+            const data = await busyRes.json();
+            if (!busyRes.ok) throw new Error(data.message || "Sync failed.");
+
+            console.log("RAW BUSY DATA:", data.busy);
+            console.log("AVAILABILITY MODE:", availability?.mode);
+            console.log("DAYS:", days);
+            console.log("TIMEZONE:", availability?.timezone);
+
+            const tz = availability?.timezone || "America/New_York";
+            const newBusy = new Set();
+            for (const range of data.busy || []) {
+                const rangeStart = new Date(range.start);
+                const rangeEnd = new Date(range.end);
+                for (const d of days) {
+                    const refDate = availability?.mode === "specific" ? d.date : nextDateForWeekday(d.key);
+                    for (const slot of slots) {
+                        const slotStart = zonedTimeToUtc(
+                            refDate.getFullYear(), refDate.getMonth(), refDate.getDate(),
+                            Math.floor(slot / 60), slot % 60, tz
+                        );
+                        const slotEnd = new Date(slotStart.getTime() + SLOT_MINUTES * 60000);
+                        if (slotStart < rangeEnd && rangeStart < slotEnd) {
+                            newBusy.add(busyKey(d.key, slot));
+                        }
+                    }
+                }
+            }
+            
+            console.log("COMPUTED BUSY SET:", newBusy);
+            setBusy(newBusy);
+
+        } catch (err) {
+            console.error("Error syncing calendar:", err);
+            popup?.close();
         } finally {
             setSyncing(false);
         }
     };
 
     const handleSave = async () => {
-        const payloadBlocks = blocks.map((b) => ({
-            dayKey: b.dayKey,
-            startSlot: slots[b.startIdx],
-            endSlot: b.endIdx < slots.length ? slots[b.endIdx] : slots[slots.length - 1] + SLOT_MINUTES,
-        }));
+        setSaveError("");
+        const payloadBlocks = blocks.map((b) => {
+            const startMinutes = slots[b.startIdx];
+            const endMinutes = b.endIdx < slots.length ? slots[b.endIdx] : slots[slots.length - 1] + SLOT_MINUTES;
+            const start = minutesToHHMM(startMinutes);
+            const end = minutesToHHMM(endMinutes);
+
+            if (availability?.mode === "specific") {
+                return { type: "specific", date: dayKeyToISODate(b.dayKey), start, end };
+            }
+            return { type: "weekly", dayOfWeek: weekdayNameToDayOfWeek(b.dayKey), start, end };
+        });
+
+        setSaving(true);
         try {
-            await fetch("http://localhost:5050/api/professional/availability/blocks", {
-                method: "POST",
+            const res = await fetch(`${API}/api/availability`, {
+                method: "PUT",
                 headers: {
                     "Content-Type": "application/json",
                     Authorization: `Bearer ${localStorage.getItem("token")}`,
                 },
                 body: JSON.stringify({
-                    startTime: availability?.startTime,
-                    endTime: availability?.endTime,
-                    timezone: availability?.timezone,
-                    blocks: payloadBlocks,
+                    timezone: availability?.timezone || "America/New_York",
+                    availability: payloadBlocks,
                 }),
             });
-        } catch {
-            // connecting backend next week
+            const data = await res.json();
+            if (!res.ok) {
+                setSaveError(data.message || "Failed to save availability.");
+                setSaving(false);
+                return;
+            }
+        } catch (err) {
+            setSaveError("Network error — is the server running?");
+            setSaving(false);
+            return;
         }
+        setSaving(false);
         onSave?.(payloadBlocks);
         onClose();
     };
@@ -199,6 +386,8 @@ export default function AvailabilityCalendar({ availability, onClose, onSave, us
             upcomingMeetings={[]}
             previousMeetings={[]}
         >
+            {loadError && <p className={styles.loadErrorText}>{loadError}</p>}
+
             {totalPages > 1 && (
                 <div className={styles.pageNav}>
                     <button
@@ -291,7 +480,7 @@ export default function AvailabilityCalendar({ availability, onClose, onSave, us
                                                 >
                                                     ×
                                                 </button>
-                                               {isSingleSlot ? (
+                                                {isSingleSlot ? (
                                                     <div className={styles.blockRowInline}>
                                                         <p className={styles.blockTitle}>Available</p>
                                                         <p className={styles.blockTime}>{startLabel} – {endLabel}</p>
@@ -318,16 +507,16 @@ export default function AvailabilityCalendar({ availability, onClose, onSave, us
                                     return (
                                         <div className={styles.availableBlockPreview} style={{ top, height }}>
                                             {isSingleSlot ? (
-                                            <div className={styles.blockRowInline}>
-                                                <p className={styles.blockTitle}>Available</p>
-                                                <p className={styles.blockTime}>{startLabel} – {endLabel}</p>
-                                            </div>
-                                        ) : (
-                                            <>
-                                                <p className={styles.blockTitle}>Available</p>
-                                                <p className={styles.blockTime}>{startLabel} – {endLabel}</p>
-                                            </>
-                                        )}
+                                                <div className={styles.blockRowInline}>
+                                                    <p className={styles.blockTitle}>Available</p>
+                                                    <p className={styles.blockTime}>{startLabel} – {endLabel}</p>
+                                                </div>
+                                            ) : (
+                                                <>
+                                                    <p className={styles.blockTitle}>Available</p>
+                                                    <p className={styles.blockTime}>{startLabel} – {endLabel}</p>
+                                                </>
+                                            )}
                                         </div>
                                     );
                                 })()}
@@ -341,10 +530,12 @@ export default function AvailabilityCalendar({ availability, onClose, onSave, us
                 Click and drag on any day column to add or extend an availability block
             </p>
 
+            {saveError && <p className={styles.loadErrorText}>{saveError}</p>}
+
             <div className={styles.footer}>
                 {syncing && <span className={styles.syncingLabel}>Syncing calendar…</span>}
-                <button type="button" className={styles.saveBtn} onClick={handleSave}>
-                    Save Availability
+                <button type="button" className={styles.saveBtn} onClick={handleSave} disabled={saving}>
+                    {saving ? "Saving…" : "Save Availability"}
                 </button>
             </div>
 

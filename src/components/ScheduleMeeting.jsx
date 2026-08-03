@@ -1,4 +1,5 @@
 import {useState, useEffect} from "react";
+import { API_BASE_URL } from "../config";
 import styles from "./ScheduleMeeting.module.css";
 import timeclockIcon from "../assets/timeclock.svg";
 import calendarIcon from "../assets/calendar.svg";
@@ -85,7 +86,7 @@ useEffect(() => {
     if (!professional?.userId) return;
 
     setLoadingAvail(true);
-    fetch(`http://localhost:5050/api/availability/${professional.userId}`)
+    fetch(`${API_BASE_URL}/api/availability/${professional.userId}`)
       .then(async (res) => {
         if (!res.ok) return null; // 404 = no availability set
         return res.json();
@@ -139,7 +140,7 @@ useEffect(() => {
       if (rescheduleMeetingId) {
         // RESCHEDULE MODE: update existing meeting's date
         const res = await fetch(
-          `http://localhost:5050/api/meetings/${rescheduleMeetingId}/reschedule`,
+          `${API_BASE_URL}/api/meetings/${rescheduleMeetingId}/reschedule`,
           {
             method: "PATCH",
             headers: {
@@ -155,7 +156,7 @@ useEffect(() => {
         onRescheduled?.();
       } else {
         // BOOKING MODE: create a new meeting
-        const res = await fetch("http://localhost:5050/api/meetings", {
+        const res = await fetch(`${API_BASE_URL}/api/meetings`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -177,7 +178,6 @@ useEffect(() => {
     } finally {
       setBooking(false);
     }
-
   }  
 
   if (!professional) return null;
