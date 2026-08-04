@@ -7,9 +7,9 @@ const API = API_BASE_URL;
 
 const SLOT_MINUTES = 30;
 const SLOT_HEIGHT = 28;
+const EVENT_V_GAP = 3; // px inset top/bottom so a block ending at 2:30 doesn't touch one starting at 2:30
 const DAYS_PER_PAGE = 5;
 const WEEKDAY_ORDER = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
-const API = "http://localhost:5050";
 
 const CALENDAR_NAV_LINKS = [
     { label: "Add Calendar" },
@@ -85,6 +85,18 @@ function convertHHMMBetweenZones(dateForContext, hhmm, fromTz, toTz) {
     return `${parts.hour}:${parts.minute}`;
 }
 
+// returns the minutes-since-midnight that a UTC instant falls on
+function utcToZonedMinutes(date, timeZone) {
+    const fmt = new Intl.DateTimeFormat("en-US", {
+        timeZone,
+        hourCycle: "h23",
+        hour: "2-digit",
+        minute: "2-digit",
+    });
+    const parts = Object.fromEntries(fmt.formatToParts(date).map((p) => [p.type, p.value]));
+    return Number(parts.hour) * 60 + Number(parts.minute);
+}
+
 // returns the UTC Date corresponding to a given wall-clock time in `timeZone`
 function zonedTimeToUtc(year, month, day, hour, minute, timeZone) {
     const naiveUtc = new Date(Date.UTC(year, month, day, hour, minute));
@@ -101,6 +113,44 @@ function zonedTimeToUtc(year, month, day, hour, minute, timeZone) {
     );
     const offset = asIfUtc - naiveUtc.getTime();
     return new Date(naiveUtc.getTime() - offset);
+}
+
+// same day/time events overlap to show both on calendar
+function layoutDayEvents(events) {
+    const sorted = [...events].sort((a, b) => a.startIdx - b.startIdx || a.endIdx - b.endIdx);
+    const positioned = [];
+    let cluster = [];
+    let clusterEnd = -Infinity;
+
+    const flushCluster = () => {
+        if (cluster.length === 0) return;
+        const colEnds = [];
+        const start = positioned.length;
+        for (const ev of cluster) {
+            let col = colEnds.findIndex((end) => end <= ev.startIdx);
+            if (col === -1) {
+                col = colEnds.length;
+                colEnds.push(ev.endIdx);
+            } else {
+                colEnds[col] = ev.endIdx;
+            }
+            positioned.push({ ...ev, colIndex: col });
+        }
+        for (let i = start; i < positioned.length; i++) positioned[i].colCount = colEnds.length;
+        cluster = [];
+    };
+
+    for (const ev of sorted) {
+        if (ev.startIdx >= clusterEnd) {
+            flushCluster();
+            clusterEnd = ev.endIdx;
+        } else {
+            clusterEnd = Math.max(clusterEnd, ev.endIdx);
+        }
+        cluster.push(ev);
+    }
+    flushCluster();
+    return positioned;
 }
 
 function buildDayColumns(availability) {
@@ -143,7 +193,7 @@ export default function AvailabilityCalendar({ availability, onClose, onSave, us
     );
 
     const [blocks, setBlocks] = useState([]);
-    const [busy, setBusy] = useState(new Set());
+    const [busyBlocks, setBusyBlocks] = useState([]);
     const [syncing, setSyncing] = useState(false);
     const [saving, setSaving] = useState(false);
     const [loadError, setLoadError] = useState("");
@@ -206,8 +256,6 @@ export default function AvailabilityCalendar({ availability, onClose, onSave, us
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [slots.length, availability?.timezone]);
 
-    const busyKey = (dayKey, slotStart) => `${dayKey}__${slotStart}`;
-
     const isInDragRange = (dayKey, idx) => {
         if (!dragging || dragging.dayKey !== dayKey) return false;
         const lo = Math.min(dragging.startIdx, dragging.hoverIdx);
@@ -256,20 +304,70 @@ export default function AvailabilityCalendar({ availability, onClose, onSave, us
 
     const removeBlock = (id) => setBlocks((prev) => prev.filter((b) => b.id !== id));
 
-    const handleSyncCalendar = async (provider) => {
-        setShowSyncModal(false);
-        if (provider === "manual") return;
+    // turns raw {start, end, title} ranges from the provider into per-day blocks,
+    // positioned on the same slot grid as the available blocks but keeping each
+    // event's real (possibly off-grid, e.g. 10:15) start/end time for display
+    const buildBusyBlocksFromRanges = (ranges, tz) => {
+        const out = [];
+        for (const range of ranges) {
+            const rangeStart = new Date(range.start);
+            const rangeEnd = new Date(range.end);
+            const title = range.title || "Busy";
 
+            for (const d of days) {
+                const refDate = availability?.mode === "specific" ? d.date : nextDateForWeekday(d.key);
+
+                const gridStart = zonedTimeToUtc(
+                    refDate.getFullYear(), refDate.getMonth(), refDate.getDate(),
+                    Math.floor(startMin / 60), startMin % 60, tz
+                );
+                const gridEnd = zonedTimeToUtc(
+                    refDate.getFullYear(), refDate.getMonth(), refDate.getDate(),
+                    Math.floor(endMin / 60), endMin % 60, tz
+                );
+
+                if (rangeEnd <= gridStart || rangeStart >= gridEnd) continue; // no overlap with this day's visible window
+
+                const clippedStart = rangeStart < gridStart ? gridStart : rangeStart;
+                const clippedEnd = rangeEnd > gridEnd ? gridEnd : rangeEnd;
+
+                const startIdx = (clippedStart.getTime() - gridStart.getTime()) / (SLOT_MINUTES * 60000);
+                const endIdx = (clippedEnd.getTime() - gridStart.getTime()) / (SLOT_MINUTES * 60000);
+
+                out.push({
+                    id: `${d.key}-busy-${range.start}-${range.end}`,
+                    dayKey: d.key,
+                    startIdx,
+                    endIdx,
+                    startLabel: minutesToLabel(utcToZonedMinutes(rangeStart, tz)),
+                    endLabel: minutesToLabel(utcToZonedMinutes(rangeEnd, tz)),
+                    title,
+                });
+            }
+        }
+        return out;
+    };
+
+    // fetches busy times for one provider. In silent mode (used on mount, for
+    // calendars that are already connected) a 404 just means "not connected yet"
+    // and is ignored instead of kicking off the OAuth popup flow.
+    const syncProviderBusy = async (provider, { silent = false } = {}) => {
         const token = localStorage.getItem("token");
-        const popup = window.open("", "_blank", "width=500,height=650");
+        if (!token) return;
 
-        setSyncing(true);
+        let popup = null;
+        if (!silent) {
+            popup = window.open("", "_blank", "width=500,height=650");
+            setSyncing(true);
+        }
+
         try {
             const busyRes = await fetch(`${API}/api/calendar/${provider}/busy`, {
                 headers: { Authorization: `Bearer ${token}` },
             });
 
             if (busyRes.status === 404) {
+                if (silent) return;
                 const connectRes = await fetch(`${API}/api/calendar/${provider}/connect`, {
                     headers: { Authorization: `Bearer ${token}` },
                 });
@@ -279,7 +377,6 @@ export default function AvailabilityCalendar({ availability, onClose, onSave, us
                 } else if (url) {
                     window.open(url, "_blank");
                 }
-                setSyncing(false);
                 return;
             }
 
@@ -288,41 +385,36 @@ export default function AvailabilityCalendar({ availability, onClose, onSave, us
             const data = await busyRes.json();
             if (!busyRes.ok) throw new Error(data.message || "Sync failed.");
 
-            console.log("RAW BUSY DATA:", data.busy);
-            console.log("AVAILABILITY MODE:", availability?.mode);
-            console.log("DAYS:", days);
-            console.log("TIMEZONE:", availability?.timezone);
-
             const tz = availability?.timezone || "America/New_York";
-            const newBusy = new Set();
-            for (const range of data.busy || []) {
-                const rangeStart = new Date(range.start);
-                const rangeEnd = new Date(range.end);
-                for (const d of days) {
-                    const refDate = availability?.mode === "specific" ? d.date : nextDateForWeekday(d.key);
-                    for (const slot of slots) {
-                        const slotStart = zonedTimeToUtc(
-                            refDate.getFullYear(), refDate.getMonth(), refDate.getDate(),
-                            Math.floor(slot / 60), slot % 60, tz
-                        );
-                        const slotEnd = new Date(slotStart.getTime() + SLOT_MINUTES * 60000);
-                        if (slotStart < rangeEnd && rangeStart < slotEnd) {
-                            newBusy.add(busyKey(d.key, slot));
-                        }
-                    }
-                }
-            }
-            
-            console.log("COMPUTED BUSY SET:", newBusy);
-            setBusy(newBusy);
+            const newBlocks = buildBusyBlocksFromRanges(data.busy || [], tz);
 
+            setBusyBlocks((prev) => [
+                ...prev.filter((b) => b.provider !== provider),
+                ...newBlocks.map((b) => ({ ...b, provider })),
+            ]);
         } catch (err) {
-            console.error("Error syncing calendar:", err);
+            console.error(`Error syncing ${provider} calendar:`, err);
             popup?.close();
         } finally {
-            setSyncing(false);
+            if (!silent) setSyncing(false);
         }
     };
+
+    const handleSyncCalendar = (provider) => {
+        setShowSyncModal(false);
+        if (provider === "manual") return;
+        syncProviderBusy(provider);
+    };
+
+    // silently re-sync any already-connected calendars whenever the availability
+    // calendar is opened, so busy times stay fresh without a manual re-sync
+    useEffect(() => {
+        if (slots.length === 0 || days.length === 0) return;
+        Promise.resolve().then(() => {
+            syncProviderBusy("google", { silent: true });
+            syncProviderBusy("outlook", { silent: true });
+        });
+    }, [days.length, slots.length, availability?.timezone]);
 
     const handleSave = async () => {
         setSaveError("");
@@ -443,43 +535,118 @@ export default function AvailabilityCalendar({ availability, onClose, onSave, us
                             })}
                         </div>
 
-                        {visibleDays.map((d) => (
-                            <div key={d.key} className={styles.dayColumn}>
-                                {slots.map((slot, idx) => {
-                                    const isHour = slot % 60 === 0;
-                                    const isBusy = busy.has(busyKey(d.key, slot));
-                                    const inDrag = isInDragRange(d.key, idx);
-                                    return (
-                                        <div
-                                            key={slot}
-                                            className={`${styles.slotCell} ${isHour ? styles.slotCellHourLine : styles.slotCellDashedLine} ${isBusy ? styles.slotCellBusy : ""} ${inDrag ? styles.slotCellDragging : ""}`}
-                                            onMouseDown={() => !isBusy && handleMouseDown(d.key, idx)}
-                                            onMouseEnter={() => handleMouseEnter(d.key, idx)}
-                                        />
-                                    );
-                                })}
+                        {visibleDays.map((d) => {
+                            const dayEvents = layoutDayEvents([
+                                ...busyBlocks.filter((b) => b.dayKey === d.key).map((b) => ({ ...b, kind: "busy" })),
+                                ...blocks.filter((b) => b.dayKey === d.key).map((b) => ({ ...b, kind: "available" })),
+                            ]);
 
-                                {blocks
-                                    .filter((b) => b.dayKey === d.key)
-                                    .map((b) => {
-                                        const top = b.startIdx * SLOT_HEIGHT;
-                                        const height = (b.endIdx - b.startIdx) * SLOT_HEIGHT;
-                                        const startLabel = minutesToLabel(slots[b.startIdx]);
-                                        const endMinutes =
-                                            b.endIdx < slots.length ? slots[b.endIdx] : slots[slots.length - 1] + SLOT_MINUTES;
-                                        const endLabel = minutesToLabel(endMinutes);
-                                        const isSingleSlot = b.endIdx - b.startIdx === 1;
+                            return (
+                                <div key={d.key} className={styles.dayColumn}>
+                                    {slots.map((slot, idx) => {
+                                        const isHour = slot % 60 === 0;
+                                        const inDrag = isInDragRange(d.key, idx);
                                         return (
-                                            <div key={b.id} className={styles.availableBlock} style={{ top, height }}>
+                                            <div
+                                                key={slot}
+                                                className={`${styles.slotCell} ${isHour ? styles.slotCellHourLine : styles.slotCellDashedLine} ${inDrag ? styles.slotCellDragging : ""}`}
+                                                onMouseDown={() => handleMouseDown(d.key, idx)}
+                                                onMouseEnter={() => handleMouseEnter(d.key, idx)}
+                                            />
+                                        );
+                                    })}
+
+                                    {dayEvents.map((ev) => {
+                                        const top = ev.startIdx * SLOT_HEIGHT;
+                                        const height = (ev.endIdx - ev.startIdx) * SLOT_HEIGHT;
+                                        let startLabel;
+                                        let endLabel;
+                                        if (ev.kind === "busy") {
+                                            startLabel = ev.startLabel;
+                                            endLabel = ev.endLabel;
+                                        } else {
+                                            startLabel = minutesToLabel(slots[ev.startIdx]);
+                                            const endMinutes =
+                                                ev.endIdx < slots.length ? slots[ev.endIdx] : slots[slots.length - 1] + SLOT_MINUTES;
+                                            endLabel = minutesToLabel(endMinutes);
+                                        }
+                                        const isSingleSlot = ev.endIdx - ev.startIdx <= 1;
+                                        const widthPct = 100 / ev.colCount;
+                                        const leftPct = ev.colIndex * widthPct;
+                                        const style = {
+                                            top: top + EVENT_V_GAP / 2,
+                                            height: Math.max(height - EVENT_V_GAP, 4),
+                                            left: `calc(${leftPct}% + 2px)`,
+                                            width: `calc(${widthPct}% - 4px)`,
+                                        };
+                                        const label = ev.kind === "busy" ? ev.title : "Available";
+
+                                        if (ev.kind === "busy") {
+                                            return (
+                                                <div
+                                                    key={ev.id}
+                                                    className={styles.busyBlock}
+                                                    style={style}
+                                                >
+                                                    <div className={styles.blockContent}>
+                                                        {isSingleSlot ? (
+                                                            <div className={styles.blockRowInline}>
+                                                                <p className={styles.blockTitle}>{label}</p>
+                                                                <p className={styles.blockTime}>{startLabel} – {endLabel}</p>
+                                                            </div>
+                                                        ) : (
+                                                            <>
+                                                                <p className={styles.blockTitle}>{label}</p>
+                                                                <p className={styles.blockTime}>{startLabel} – {endLabel}</p>
+                                                            </>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            );
+                                        }
+
+                                        return (
+                                            <div key={ev.id} className={styles.availableBlock} style={style}>
+                                                {/* rendered after blockContent so it always paints on top and is
+                                                    never clipped, even when the block is too small to show the
+                                                    full title/time — you should never need to resize just to delete */}
+                                                <div className={styles.blockContent}>
+                                                    {isSingleSlot ? (
+                                                        <div className={styles.blockRowInline}>
+                                                            <p className={styles.blockTitle}>{label}</p>
+                                                            <p className={styles.blockTime}>{startLabel} – {endLabel}</p>
+                                                        </div>
+                                                    ) : (
+                                                        <>
+                                                            <p className={styles.blockTitle}>{label}</p>
+                                                            <p className={styles.blockTime}>{startLabel} – {endLabel}</p>
+                                                        </>
+                                                    )}
+                                                </div>
                                                 <button
                                                     type="button"
                                                     className={styles.blockRemoveBtn}
                                                     onMouseDown={(e) => e.stopPropagation()}
-                                                    onClick={() => removeBlock(b.id)}
+                                                    onClick={() => removeBlock(ev.id)}
                                                     aria-label="Remove availability block"
                                                 >
                                                     ×
                                                 </button>
+                                            </div>
+                                        );
+                                    })}
+
+                                    {dragging?.dayKey === d.key && (() => {
+                                        const lo = Math.min(dragging.startIdx, dragging.hoverIdx);
+                                        const hi = Math.max(dragging.startIdx, dragging.hoverIdx) + 1;
+                                        const top = lo * SLOT_HEIGHT;
+                                        const height = (hi - lo) * SLOT_HEIGHT;
+                                        const startLabel = minutesToLabel(slots[lo]);
+                                        const endMinutes = hi < slots.length ? slots[hi] : slots[slots.length - 1] + SLOT_MINUTES;
+                                        const endLabel = minutesToLabel(endMinutes);
+                                        const isSingleSlot = hi - lo === 1;
+                                        return (
+                                            <div className={styles.availableBlockPreview} style={{ top, height }}>
                                                 {isSingleSlot ? (
                                                     <div className={styles.blockRowInline}>
                                                         <p className={styles.blockTitle}>Available</p>
@@ -493,35 +660,10 @@ export default function AvailabilityCalendar({ availability, onClose, onSave, us
                                                 )}
                                             </div>
                                         );
-                                    })}
-
-                                {dragging?.dayKey === d.key && (() => {
-                                    const lo = Math.min(dragging.startIdx, dragging.hoverIdx);
-                                    const hi = Math.max(dragging.startIdx, dragging.hoverIdx) + 1;
-                                    const top = lo * SLOT_HEIGHT;
-                                    const height = (hi - lo) * SLOT_HEIGHT;
-                                    const startLabel = minutesToLabel(slots[lo]);
-                                    const endMinutes = hi < slots.length ? slots[hi] : slots[slots.length - 1] + SLOT_MINUTES;
-                                    const endLabel = minutesToLabel(endMinutes);
-                                    const isSingleSlot = hi - lo === 1;
-                                    return (
-                                        <div className={styles.availableBlockPreview} style={{ top, height }}>
-                                            {isSingleSlot ? (
-                                                <div className={styles.blockRowInline}>
-                                                    <p className={styles.blockTitle}>Available</p>
-                                                    <p className={styles.blockTime}>{startLabel} – {endLabel}</p>
-                                                </div>
-                                            ) : (
-                                                <>
-                                                    <p className={styles.blockTitle}>Available</p>
-                                                    <p className={styles.blockTime}>{startLabel} – {endLabel}</p>
-                                                </>
-                                            )}
-                                        </div>
-                                    );
-                                })()}
-                            </div>
-                        ))}
+                                    })()}
+                                </div>
+                            );
+                        })}
                     </div>
                 </div>
             </div>
@@ -529,6 +671,17 @@ export default function AvailabilityCalendar({ availability, onClose, onSave, us
             <p className={styles.hintText}>
                 Click and drag on any day column to add or extend an availability block
             </p>
+
+            <div className={styles.legend}>
+                <span className={styles.legendItem}>
+                    <span className={`${styles.legendSwatch} ${styles.legendSwatchBusy}`} />
+                    Busy
+                </span>
+                <span className={styles.legendItem}>
+                    <span className={`${styles.legendSwatch} ${styles.legendSwatchAvailable}`} />
+                    Available
+                </span>
+            </div>
 
             {saveError && <p className={styles.loadErrorText}>{saveError}</p>}
 
