@@ -88,6 +88,8 @@
 
 .bodyRow {
     display: flex;
+    border-bottom: 1px solid rgba(20, 33, 61, 0.1);
+    /* closes off the grid's bottom edge now that rows border-top instead of -bottom */
 }
 
 .timeColumn {
@@ -104,7 +106,10 @@
     padding: 0 8px 0 0;
     text-align: right;
     display: flex;
-    align-items: flex-end;
+    /* top-aligned: the label marks the gridline at the TOP of its own row (when
+       that hour starts), not the bottom — bottom-alignment made "9:00 AM" sit on
+       the 9:30 line, making a 9:00 event look like it started 30min early */
+    align-items: flex-start;
     justify-content: flex-end;
     box-sizing: border-box;
     white-space: nowrap;
@@ -112,11 +117,11 @@
 }
 
 .timeLabelHour {
-    border-bottom: 1px solid rgba(20, 33, 61, 0.1);
+    border-top: 1px solid rgba(20, 33, 61, 0.1);
 }
 
 .timeLabelDashed {
-    border-bottom: 1px dashed rgba(20, 33, 61, 0.12);
+    border-top: 1px dashed rgba(20, 33, 61, 0.12);
 }
 
 .dayColumn {
@@ -133,11 +138,11 @@
 }
 
 .slotCellHourLine {
-    border-bottom: 1px solid rgba(20, 33, 61, 0.1);
+    border-top: 1px solid rgba(20, 33, 61, 0.1);
 }
 
 .slotCellDashedLine {
-    border-bottom: 1px dashed rgba(20, 33, 61, 0.12);
+    border-top: 1px dashed rgba(20, 33, 61, 0.12);
 }
 
 .slotCell:hover {
@@ -154,9 +159,6 @@
     border-radius: 4px;
     padding: 4px 6px;
     box-sizing: border-box;
-    /* not hidden: on a very short/narrow block the remove button would get
-       clipped along with the overflowing title/time text. blockContent (below)
-       clips the text; the block itself stays open so the button is always hittable */
     overflow: visible;
 }
 
@@ -164,6 +166,42 @@
     width: 100%;
     height: 100%;
     overflow: hidden;
+    border-radius: inherit;
+}
+
+.busyBlock .blockContentExpandable:hover {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: auto;
+    min-height: 100%;
+    padding: 4px 6px;
+    box-sizing: border-box;
+    background: inherit;
+    border: inherit;
+    box-shadow: 0 4px 10px rgba(20, 33, 61, 0.3);
+    z-index: 30;
+    overflow: visible;
+}
+
+.busyBlock .blockContentExpandable:hover .blockRowInline {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0;
+}
+
+.busyBlock .blockContentExpandable:hover .blockTitle,
+.busyBlock .blockContentExpandable:hover .blockTime {
+    white-space: normal;
+}
+
+/* a child's z-index only wins within its own parent's stacking context, so a
+   hovered/expanded block would still render under a sibling with a higher
+   z-index (e.g. an overlapping .availableBlock). Bumping the parent itself
+   lifts the whole thing above every other block, however they're layered. */
+.busyBlock:has(.blockContentExpandable:hover) {
+    z-index: 40;
 }
 
 .availableBlockPreview {
@@ -196,6 +234,12 @@
     border: 1px solid #d6a63f;
     z-index: 1;
     pointer-events: none;
+}
+
+/* re-enable hover just on the text so the full title/time tooltip still works,
+   without making the whole block (and its drag-through) hoverable/clickable */
+.busyBlock .blockContent {
+    pointer-events: auto;
 }
 
 .busyBlock .blockTitle,

@@ -581,6 +581,14 @@ export default function AvailabilityCalendar({ availability, onClose, onSave, us
                                         };
                                         const label = ev.kind === "busy" ? ev.title : "Available";
 
+                                        // short or narrow (overlapping) blocks are the ones whose title/time
+                                        // actually get cut off — only those expand on hover. Skipped for
+                                        // available blocks: expanding would cover the remove (×) button.
+                                        const isCutOff = ev.kind === "busy" && (isSingleSlot || ev.colCount > 1);
+                                        const contentClassName = isCutOff
+                                            ? `${styles.blockContent} ${styles.blockContentExpandable}`
+                                            : styles.blockContent;
+
                                         if (ev.kind === "busy") {
                                             return (
                                                 <div
@@ -588,7 +596,7 @@ export default function AvailabilityCalendar({ availability, onClose, onSave, us
                                                     className={styles.busyBlock}
                                                     style={style}
                                                 >
-                                                    <div className={styles.blockContent}>
+                                                    <div className={contentClassName}>
                                                         {isSingleSlot ? (
                                                             <div className={styles.blockRowInline}>
                                                                 <p className={styles.blockTitle}>{label}</p>
@@ -610,7 +618,7 @@ export default function AvailabilityCalendar({ availability, onClose, onSave, us
                                                 {/* rendered after blockContent so it always paints on top and is
                                                     never clipped, even when the block is too small to show the
                                                     full title/time — you should never need to resize just to delete */}
-                                                <div className={styles.blockContent}>
+                                                <div className={contentClassName}>
                                                     {isSingleSlot ? (
                                                         <div className={styles.blockRowInline}>
                                                             <p className={styles.blockTitle}>{label}</p>
