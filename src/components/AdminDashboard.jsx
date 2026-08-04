@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import Dashboard from "./Dashboard";
 import ViewStudents from "./ViewStudents";
-import ViewProfessionals from "./ViewProfessionals";
+import ViewProfessionals from "./AdminViewProfessionals";
 import styles from "./AdminDashboard.module.css";
 import { API_BASE_URL } from "../config";
 import chatIconSrc from "../assets/chaticon.svg";

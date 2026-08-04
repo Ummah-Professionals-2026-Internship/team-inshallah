@@ -5,15 +5,25 @@ import timeclockIcon from "../assets/timeclock.svg";
 import calendarIcon from "../assets/calendar.svg";
 import worldIcon from "../assets/earth.svg";
 
-// Turn a specific date's availability blocks into 1-hour slot start times.
-// e.g. a 10:00-13:00 block on that weekday becomes ["10:00", "11:00", "12:00"]
+// Formats a Date as "YYYY-MM-DD" using local time (not UTC), so it matches
+// how specific-date blocks are stored (e.g. "2026-06-23").
+function toDateStr(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+// Turn a date's availability blocks into 1-hour slot start times.
+// Handles both weekly (recurring) and specific (one-off date) blocks.
 function slotsForDate(date, blocks) {
   const dayOfWeek = date.getDay();
+  const dateStr = toDateStr(date);
   const slots = [];
 
   for (const block of blocks) {
-    if (block.type !== "weekly") continue;      // demo handles weekly only
-    if (block.dayOfWeek !== dayOfWeek) continue; // only blocks for this weekday
+    const matches =
+      (block.type === "weekly" && block.dayOfWeek === dayOfWeek) ||
+      (block.type === "specific" && block.date === dateStr);
+
+    if (!matches) continue;
 
     const [startHour] = block.start.split(":").map(Number);
     const [endHour] = block.end.split(":").map(Number);
@@ -27,13 +37,17 @@ function slotsForDate(date, blocks) {
   return slots;
 }
 
-// Which weekdays does this professional work? e.g. {1,2,3,4,5}
-function availableDaysOfWeek(blocks) {
-  const days = new Set();
-  for (const block of blocks) {
-    if (block.type === "weekly") days.add(block.dayOfWeek);
-  }
-  return days;
+// Is this specific calendar date available, based on either a recurring
+// weekly block for its weekday, or a specific block matching this exact date?
+function isDateAvailable(date, blocks) {
+  const dayOfWeek = date.getDay();
+  const dateStr = toDateStr(date);
+
+  return blocks.some(
+    (block) =>
+      (block.type === "weekly" && block.dayOfWeek === dayOfWeek) ||
+      (block.type === "specific" && block.date === dateStr)
+  );
 }
 
 // Build the grid of days for a given month, Monday-first.
@@ -102,7 +116,6 @@ useEffect(() => {
   }, [professional]);
 
   const blocks = availability?.availability || [];
-  const openDays = availableDaysOfWeek(blocks);
   const cells = buildMonthGrid(viewMonth.getFullYear(), viewMonth.getMonth());
   const daySlots = selectedDate ? slotsForDate(selectedDate, blocks) : [];
   const allowedPurposes = professional?.volunteeringFor || [];
@@ -116,7 +129,7 @@ useEffect(() => {
   });
 
   const isAvailable = (date) =>
-    date >= today && openDays.has(date.getDay());
+    date >= today && isDateAvailable(date, blocks);
 
   const changeMonth = (delta) =>
     setViewMonth(
