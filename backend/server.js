@@ -974,6 +974,163 @@ app.get("/api/availability/:professionalUserId", async (req, res) => {
   }
 });
 
+
+// ===== GET /api/meetings — meetings for the logged-in user (student or professional) =====
+app.get("/api/meetings", requireAuth, async (req, res) => {
+  try {
+    // Find the user's student and/or professional profile
+    const student = await Student.findOne({ user: req.userId });
+    const professional = await Professional.findOne({ user: req.userId });
+
+    const filter = [];
+    if (student) filter.push({ student: student._id });
+    if (professional) filter.push({ professional: professional._id });
+
+    if (filter.length === 0) {
+      return res.json({ meetings: [] });
+    }
+
+    const meetings = await Meeting.find({ $or: filter })
+      .populate("student", "name user")
+      .populate("professional", "name user")
+      .sort({ date: 1 });
+
+    res.json({ meetings });
+  } catch (err) {
+    console.log("GET MEETINGS ERROR:", err);
+    res.status(500).json({ message: "Server error. Please try again later." });
+  }
+});
+
+
+// ===== PATCH /api/meetings/:id/cancel — cancel a meeting =====
+app.patch("/api/meetings/:id/cancel", requireAuth, async (req, res) => {
+  try {
+    const { reason } = req.body;
+
+    const meeting = await Meeting.findById(req.params.id)
+      .populate("student", "name user")
+      .populate("professional", "name user");
+
+    if (!meeting) {
+      return res.status(404).json({ message: "Meeting not found." });
+    }
+
+    const isStudent = meeting.student?.user?.toString() === req.userId;
+    const isProfessional = meeting.professional?.user?.toString() === req.userId;
+
+    if (!isStudent && !isProfessional) {
+      return res.status(403).json({ message: "You are not part of this meeting." });
+    }
+
+    meeting.status = "cancelled";
+    meeting.cancelReason = reason || "";
+    meeting.cancelledBy = isStudent ? "student" : "professional";
+    await meeting.save();
+
+    try {
+      const studentUser = await User.findById(meeting.student.user);
+      const professionalUser = await User.findById(meeting.professional.user);
+      const dateText = new Date(meeting.date).toLocaleString("en-US", {
+        weekday: "long", month: "long", day: "numeric", hour: "numeric", minute: "2-digit",
+      });
+
+      if (studentUser?.email) {
+        await sendMeetingEmail(studentUser.email, {
+          recipientName: meeting.student.name,
+          otherPartyName: meeting.professional.name,
+          dateText: `CANCELLED — was ${dateText}`,
+          purpose: meeting.purpose,
+          notes: reason ? `Cancellation reason: ${reason}` : "",
+        });
+      }
+      if (professionalUser?.email) {
+        await sendMeetingEmail(professionalUser.email, {
+          recipientName: meeting.professional.name,
+          otherPartyName: meeting.student.name,
+          dateText: `CANCELLED — was ${dateText}`,
+          purpose: meeting.purpose,
+          notes: reason ? `Cancellation reason: ${reason}` : "",
+        });
+      }
+    } catch (mailErr) {
+      console.log("CANCEL EMAIL ERROR (cancel still succeeded):", mailErr);
+    }
+
+    res.json({ message: "Meeting cancelled.", meeting });
+  } catch (err) {
+    console.log("CANCEL MEETING ERROR:", err);
+    res.status(500).json({ message: "Server error. Please try again later." });
+  }
+});
+
+// ===== PATCH /api/meetings/:id/reschedule — reschedule a meeting =====
+app.patch("/api/meetings/:id/reschedule", requireAuth, async (req, res) => {
+  try {
+    const { date } = req.body;
+    if (!date) {
+      return res.status(400).json({ message: "New date is required." });
+    }
+
+    const newDate = new Date(date);
+    if (isNaN(newDate.getTime())) {
+      return res.status(400).json({ message: "Invalid date." });
+    }
+
+    const meeting = await Meeting.findById(req.params.id)
+      .populate("student", "name user")
+      .populate("professional", "name user");
+
+    if (!meeting) {
+      return res.status(404).json({ message: "Meeting not found." });
+    }
+
+    const isStudent = meeting.student?.user?.toString() === req.userId;
+    const isProfessional = meeting.professional?.user?.toString() === req.userId;
+    if (!isStudent && !isProfessional) {
+      return res.status(403).json({ message: "You are not part of this meeting." });
+    }
+
+    const oldDate = new Date(meeting.date);
+    meeting.date = newDate;
+    meeting.status = "rescheduled";
+    await meeting.save();
+
+    try {
+      const studentUser = await User.findById(meeting.student.user);
+      const professionalUser = await User.findById(meeting.professional.user);
+      const oldText = oldDate.toLocaleString("en-US", { weekday: "long", month: "long", day: "numeric", hour: "numeric", minute: "2-digit" });
+      const newText = newDate.toLocaleString("en-US", { weekday: "long", month: "long", day: "numeric", hour: "numeric", minute: "2-digit" });
+
+      if (studentUser?.email) {
+        await sendMeetingEmail(studentUser.email, {
+          recipientName: meeting.student.name,
+          otherPartyName: meeting.professional.name,
+          dateText: `RESCHEDULED — now ${newText} (was ${oldText})`,
+          purpose: meeting.purpose,
+          notes: meeting.notes,
+        });
+      }
+      if (professionalUser?.email) {
+        await sendMeetingEmail(professionalUser.email, {
+          recipientName: meeting.professional.name,
+          otherPartyName: meeting.student.name,
+          dateText: `RESCHEDULED — now ${newText} (was ${oldText})`,
+          purpose: meeting.purpose,
+          notes: meeting.notes,
+        });
+      }
+    } catch (mailErr) {
+      console.log("RESCHEDULE EMAIL ERROR (reschedule still succeeded):", mailErr);
+    }
+
+    res.json({ message: "Meeting rescheduled.", meeting });
+  } catch (err) {
+    console.log("RESCHEDULE MEETING ERROR:", err);
+    res.status(500).json({ message: "Server error. Please try again later." });
+  }
+});
+
 // ===== GET /api/calendar/google/connect — redirect user to Google's login/consent screen =====
 app.get("/api/calendar/google/connect", requireAuth, (req, res) => {
   const authUrl = googleOAuthClient.generateAuthUrl({
