@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import styles from "./ViewProfessionals.module.css";
+import styles from "./AdminViewProfessionals.module.css";
 import { API_BASE_URL } from "../config";
 
-export default function ViewProfessionals({ onClose, onSelectProfessional }) {
+export default function AdminViewProfessionals({ onClose, onSelectProfessional }) {
   const navigate = useNavigate();
   const [professionals, setProfessionals] = useState([]);
   const [selectedProfessional, setSelectedProfessional] = useState(null);
