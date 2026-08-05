@@ -44,13 +44,20 @@ export default function LoginPage() {
                 navigate("/verify-email", { state: { email: data.user.email } });
                 return;
             }
-            
-            if (!data.user.profileComplete) {
+
+            // admins skip the form-completion flow entirely — no student/professional form for them
+            if (!data.user.profileComplete && data.user.role !== "admin") {
                 navigate(data.user.role === "student" ? "/student-form" : "/professional-form");
                 return;
             }
 
-            navigate(data.user.role === "student" ? "/student-dashboard" : "/professional-dashboard");
+            navigate(
+              data.user.role === "student"
+                ? "/student-dashboard"
+                : data.user.role === "admin"
+                ? "/admin-dashboard"
+                : "/professional-dashboard"
+            );
         } catch (err) {
             alert("something went wrong. is the server running?");
         }

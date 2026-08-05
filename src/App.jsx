@@ -6,6 +6,7 @@ import StudentForm from "./components/StudentForm";
 import ProfessionalForm from "./components/ProfessionalForm";
 import StudentDashboard from "./components/StudentDashboard";
 import ProfessionalDashboard from "./components/ProfessionalDashboard";
+import AdminDashboard from "./components/AdminDashboard";
 
 export default function App() {
   return (
@@ -18,6 +19,7 @@ export default function App() {
         <Route path="/professional-form" element={<ProfessionalForm />} />
         <Route path="/student-dashboard" element={<StudentDashboard />} />
         <Route path="/professional-dashboard" element={<ProfessionalDashboard />} />
+        <Route path="/admin-dashboard" element={<AdminDashboard />} />
       </Routes>
     </BrowserRouter>
   );

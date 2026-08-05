@@ -9,7 +9,7 @@ const SLOT_MINUTES = 30;
 const SLOT_HEIGHT = 28;
 const DAYS_PER_PAGE = 5;
 const WEEKDAY_ORDER = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
-const API = "http://localhost:5050";
+
 
 const CALENDAR_NAV_LINKS = [
     { label: "Add Calendar" },

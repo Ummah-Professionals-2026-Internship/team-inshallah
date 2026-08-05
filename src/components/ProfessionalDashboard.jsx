@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { API_BASE_URL } from "../config";
 import Dashboard from "./Dashboard";
 import ProfessionalProfile from "./ProfessionalProfile";
@@ -42,6 +43,7 @@ const PROFESSIONAL_TODO = [
 
 
 export default function ProfessionalDashboard({ userName = " " }) {
+  const navigate = useNavigate();
   const [activeView, setActiveView] = useState("home");
   const [profilePhoto, setProfilePhoto] = useState("");
   const [displayName, setDisplayName] = useState(userName);
@@ -49,6 +51,14 @@ export default function ProfessionalDashboard({ userName = " " }) {
   const [availabilityData, setAvailabilityData] = useState(null);
   const [upcomingMeetings, setUpcomingMeetings] = useState([]);
   const [previousMeetings, setPreviousMeetings] = useState([]);
+
+  const adminToken = localStorage.getItem("adminToken");
+
+  const exitImpersonation = () => {
+    localStorage.setItem("token", adminToken);
+    localStorage.removeItem("adminToken");
+    navigate("/admin-dashboard");
+  };
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -99,19 +109,54 @@ export default function ProfessionalDashboard({ userName = " " }) {
     setAvailabilityData(null);
   };
 
+  const impersonationBanner = adminToken && (
+    <div
+      style={{
+        background: "#fdbb37",
+        padding: "10px 20px",
+        textAlign: "center",
+        fontFamily: "Montserrat, sans-serif",
+        fontWeight: 600,
+        color: "#1a1a1a",
+      }}
+    >
+      Viewing as {displayName} (Admin mode) —{" "}
+      <button
+        type="button"
+        onClick={exitImpersonation}
+        style={{
+          fontWeight: 700,
+          cursor: "pointer",
+          background: "none",
+          border: "none",
+          textDecoration: "underline",
+          color: "#1a1a1a",
+          fontFamily: "inherit",
+          fontSize: "inherit",
+        }}
+      >
+        Exit
+      </button>
+    </div>
+  );
+
   if (availabilityStep === "calendar") {
     return (
-      <AvailabilityCalendar
-        availability={availabilityData}
-        onClose={closeAvailabilityFlow}
-        userName={displayName}
-        profilePhoto={profilePhoto}
-      />
+      <>
+        {impersonationBanner}
+        <AvailabilityCalendar
+          availability={availabilityData}
+          onClose={closeAvailabilityFlow}
+          userName={displayName}
+          profilePhoto={profilePhoto}
+        />
+      </>
     );
   }
 
   return (
     <>
+      {impersonationBanner}
       <Dashboard
         userName={displayName}
         userRole="Professional"
