@@ -146,6 +146,10 @@ export default function AvailabilityModal({ onClose, onContinue }) {
             setError("Please select at least one date or day.");
             return;
         }
+        if (!timezone) {
+            setError("Please select a timezone.");
+            return;
+        }
         setError("");
 
         const payload =
@@ -248,12 +252,13 @@ export default function AvailabilityModal({ onClose, onContinue }) {
                 </button>
 
               <div className={styles.timezoneSection}>
-                    <label className={styles.timezoneLabel}>Timezone</label>
+                    <label className={styles.timezoneLabel}>Timezone *</label>
                     <div className={styles.timezoneRow}>
                         <select
                             className={styles.timezoneSelect}
                             value={timezone}
                             onChange={(e) => setTimezone(e.target.value)}
+                            required
                         >
                             <option value="">Select Timezone</option>
                             {!TIMEZONE_OPTIONS.some((tz) => tz.value === timezone) && timezone && (

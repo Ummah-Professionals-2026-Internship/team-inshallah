@@ -640,30 +640,30 @@ app.get("/api/professionals", async (req, res) => {
     const paginatedResults = visibleProfessionals.slice(startIndex, startIndex + limit);
 
     const cardData = await Promise.all(
-  paginatedResults.map(
-    async (professional) => ({
-      id: professional._id,
-      userId: professional.user,
-      name: professional.name,
-      jobTitle: professional.jobTitle,
-      summary: professional.summary || professional.aboutMe,
-      aboutMe: professional.aboutMe,                    
-      phone: professional.phone,                        
-      resume: await getSignedFileUrl(professional.resume),
-      photo: await getSignedFileUrl(
-        professional.photo || professional.profilePicture
-      ),
-      linkedin: professional.linkedin,
-      website: professional.website,
-      github: professional.github,
-      other: professional.externalLinks?.other || "",
-      industry: professional.industry,
-      services: professional.services,
-      volunteeringFor: professional.volunteeringFor,
-      otherInformation: professional.otherInformation,  // NEW
-    })
-  )
-);
+      paginatedResults.map(
+        async (professional) => ({
+          id: professional._id,
+          userId: professional.user,
+          name: professional.name,
+          jobTitle: professional.jobTitle,
+          summary: professional.summary || professional.aboutMe,
+          aboutMe: professional.aboutMe,
+          phone: professional.phone,
+          resume: await getSignedFileUrl(professional.resume),
+          photo: await getSignedFileUrl(
+            professional.photo || professional.profilePicture
+          ),
+          linkedin: professional.linkedin,
+          website: professional.website,
+          github: professional.github,
+          other: professional.externalLinks?.other || "",
+          industry: professional.industry,
+          services: professional.services,
+          volunteeringFor: professional.volunteeringFor,
+          otherInformation: professional.otherInformation,  // NEW
+        })
+      )
+    );
 
     res.json({
       professionals: cardData,
@@ -863,34 +863,34 @@ app.post("/api/meetings", requireAuth, async (req, res) => {
     endOfWeek.setDate(endOfWeek.getDate() + 7);
 
     const meetingThisWeek = await Meeting.findOne({
-  professional: professional._id,
-  status: { $in: ["scheduled", "completed"] },
-  date: { $gte: startOfWeek, $lt: endOfWeek },
-});
+      professional: professional._id,
+      status: { $in: ["scheduled", "completed"] },
+      date: { $gte: startOfWeek, $lt: endOfWeek },
+    });
 
-if (meetingThisWeek) {
-  return res.status(400).json({
-    message: "This professional already has a meeting booked this week.",
-  });
-}
+    if (meetingThisWeek) {
+      return res.status(400).json({
+        message: "This professional already has a meeting booked this week.",
+      });
+    }
 
-// enforce: student can only book one meeting per week (with any professional)
-const studentMeetingThisWeek = await Meeting.findOne({
-  student: student._id,
-  status: { $in: ["scheduled", "completed"] },
-  date: { $gte: startOfWeek, $lt: endOfWeek },
-});
+    // enforce: student can only book one meeting per week (with any professional)
+    const studentMeetingThisWeek = await Meeting.findOne({
+      student: student._id,
+      status: { $in: ["scheduled", "completed"] },
+      date: { $gte: startOfWeek, $lt: endOfWeek },
+    });
 
-if (studentMeetingThisWeek) {
-  return res.status(400).json({
-    message: "You already have a meeting booked this week.",
-  });
-}
+    if (studentMeetingThisWeek) {
+      return res.status(400).json({
+        message: "You already have a meeting booked this week.",
+      });
+    }
 
-const studentUser = await User.findById(student.user);
-const professionalUser = await User.findById(professional.user);
+    const studentUser = await User.findById(student.user);
+    const professionalUser = await User.findById(professional.user);
 
-const meeting = await Meeting.create({
+    const meeting = await Meeting.create({
       professional: professional._id,
       student: student._id,
       date: meetingDate,
@@ -900,7 +900,7 @@ const meeting = await Meeting.create({
     });
 
 
-  // Send confirmation emails to both parties.
+    // Send confirmation emails to both parties.
     // Wrapped so an email failure never breaks a successful booking.
     try {
       const dateText = meetingDate.toLocaleString("en-US", {
@@ -935,7 +935,7 @@ const meeting = await Meeting.create({
     } catch (mailErr) {
       console.log("MEETING EMAIL ERROR (booking still succeeded):", mailErr);
     }
-    
+
     res.status(201).json({ message: "Meeting booked!", meeting });
   } catch (err) {
     console.log("BOOK MEETING ERROR:", err);
@@ -1273,21 +1273,51 @@ app.get("/api/calendar/google/busy", requireAuth, async (req, res) => {
     const calendarIds = calendarList.data.items.map((cal) => cal.id);
 
     const now = new Date();
+    // start a day early so same day earlier events still show
+    const syncFrom = new Date(now.getTime() - 24 * 60 * 60 * 1000);
     const oneMonthOut = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
 
-    const response = await calendar.freebusy.query({
-      requestBody: {
-        timeMin: now.toISOString(),
-        timeMax: oneMonthOut.toISOString(),
-        items: calendarIds.map((id) => ({ id })),
-      },
-    });
-
-    // merge busy blocks from every calendar into one flat list
+    // events.list (not freebusy.query) so we get each event's title, not just the time range
     const busyTimes = [];
     for (const calId of calendarIds) {
-      const calBusy = response.data.calendars[calId]?.busy || [];
-      busyTimes.push(...calBusy);
+      let pageToken = undefined;
+      do {
+        const eventsRes = await calendar.events.list({
+          calendarId: calId,
+          timeMin: syncFrom.toISOString(),
+          timeMax: oneMonthOut.toISOString(),
+          singleEvents: true, // expand recurring events into individual instances
+          orderBy: "startTime",
+          maxResults: 2500,
+          pageToken,
+        });
+
+        for (const event of eventsRes.data.items || []) {
+          console.log(
+            "GOOGLE EVENT:",
+            JSON.stringify({
+              summary: event.summary,
+              start: event.start,
+              end: event.end,
+              status: event.status,
+              transparency: event.transparency,
+              recurringEventId: event.recurringEventId,
+            })
+          );
+
+          if (event.status === "cancelled") continue;
+          if (event.transparency === "transparent") continue; // marked "free", not busy
+          if (!event.start?.dateTime || !event.end?.dateTime) continue; // skip all-day events
+
+          busyTimes.push({
+            start: event.start.dateTime,
+            end: event.end.dateTime,
+            title: event.summary || "Busy",
+          });
+        }
+
+        pageToken = eventsRes.data.nextPageToken;
+      } while (pageToken);
     }
 
     await CalendarConnection.findByIdAndUpdate(connection._id, {
@@ -1426,12 +1456,15 @@ app.get("/api/calendar/outlook/busy", requireAuth, async (req, res) => {
     let accessToken = decryptToken(connection.accessToken);
 
     const now = new Date();
+    // start a day early (not from "now") so an event already underway or already
+    // finished earlier today still shows up instead of silently disappearing for the day
+    const syncFrom = new Date(now.getTime() - 24 * 60 * 60 * 1000);
     const oneMonthOut = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
 
     const firstUrl = new URL("https://graph.microsoft.com/v1.0/me/calendarView");
-    firstUrl.searchParams.set("startDateTime", now.toISOString());
+    firstUrl.searchParams.set("startDateTime", syncFrom.toISOString());
     firstUrl.searchParams.set("endDateTime", oneMonthOut.toISOString());
-    firstUrl.searchParams.set("$select", "start,end,showAs");
+    firstUrl.searchParams.set("$select", "start,end,showAs,subject");
     firstUrl.searchParams.set("$top", "100");
 
     // fetches one page from Graph using whatever access token is passed in
@@ -1484,12 +1517,13 @@ app.get("/api/calendar/outlook/busy", requireAuth, async (req, res) => {
       nextUrl = data["@odata.nextLink"] || null;
     }
 
-    // match the shape of the Google busy response: [{ start, end }] in ISO UTC
+    // match the shape of the Google busy response: [{ start, end, title }] in ISO UTC
     const busyTimes = events
       .filter((event) => event.showAs !== "free")
       .map((event) => ({
         start: new Date(event.start.dateTime + "Z").toISOString(),
         end: new Date(event.end.dateTime + "Z").toISOString(),
+        title: event.subject || "Busy",
       }));
 
     await CalendarConnection.findByIdAndUpdate(connection._id, {
