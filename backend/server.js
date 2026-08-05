@@ -1131,6 +1131,53 @@ app.patch("/api/meetings/:id/reschedule", requireAuth, async (req, res) => {
   }
 });
 
+// ===== PATCH /api/meetings/:id/feedback — submit feedback for a completed meeting =====
+app.patch("/api/meetings/:id/feedback", requireAuth, async (req, res) => {
+  try {
+    const { meetingRating, needsMetRating, mentorRating, comment } = req.body;
+
+    const meeting = await Meeting.findById(req.params.id)
+      .populate("student", "name user")
+      .populate("professional", "name user");
+
+    if (!meeting) {
+      return res.status(404).json({ message: "Meeting not found." });
+    }
+
+    // Only the student or professional on this meeting can leave feedback.
+    const isStudent = meeting.student?.user?.toString() === req.userId;
+    const isProfessional = meeting.professional?.user?.toString() === req.userId;
+    if (!isStudent && !isProfessional) {
+      return res.status(403).json({ message: "You are not part of this meeting." });
+    }
+
+    const feedbackData = {
+      meetingRating,
+      needsMetRating,
+      mentorRating,
+      comment: comment || "",
+      submittedAt: new Date(),
+    };
+
+    // Save under student or professional depending on who's submitting.
+    if (!meeting.feedback) meeting.feedback = {};
+    if (isStudent) {
+      meeting.feedback.student = feedbackData;
+    } else {
+      meeting.feedback.professional = feedbackData;
+    }
+
+    meeting.markModified("feedback");
+    await meeting.save();
+    
+    res.json({ message: "Feedback submitted.", meeting });
+  } catch (err) {
+    console.log("FEEDBACK ERROR:", err);
+    res.status(500).json({ message: "Server error. Please try again later." });
+  }
+});
+
+
 // ===== GET /api/calendar/google/connect — redirect user to Google's login/consent screen =====
 app.get("/api/calendar/google/connect", requireAuth, (req, res) => {
   const authUrl = googleOAuthClient.generateAuthUrl({

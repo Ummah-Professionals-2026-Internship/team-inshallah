@@ -19,6 +19,22 @@ const meetingSchema = new mongoose.Schema(
     },
     cancelReason: { type: String, default: "" },
     cancelledBy: { type: String, default: "" },
+    feedback: {
+      student: {
+        meetingRating: { type: Number, min: 1, max: 5 },
+        needsMetRating: { type: Number, min: 1, max: 5 },
+        mentorRating: { type: Number, min: 1, max: 5 },
+        comment: { type: String, default: "" },
+        submittedAt: { type: Date },
+      },
+      professional: {
+        meetingRating: { type: Number, min: 1, max: 5 },
+        needsMetRating: { type: Number, min: 1, max: 5 },
+        mentorRating: { type: Number, min: 1, max: 5 },
+        comment: { type: String, default: "" },
+        submittedAt: { type: Date },
+      },
+    },
   },
   { timestamps: true }
 );
