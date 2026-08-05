@@ -18,6 +18,7 @@ export default function Dashboard({
   previousMeetings,
   onNavClick,
   onProfileClick,
+  onMenuToggle,
   children,
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -75,7 +76,11 @@ export default function Dashboard({
             className={styles.burgerBtn}
             onClick={(e) => {
               e.stopPropagation(); // Stop click from triggering userArea profile click
-              setMenuOpen((open) => !open);
+              setMenuOpen((open) => {
+                const next = !open;
+                onMenuToggle?.(next);
+                return next;
+              });
             }}
             aria-label="Toggle menu"
             aria-expanded={menuOpen}
@@ -102,7 +107,7 @@ export default function Dashboard({
         </div>
       </header>
 
-      {menuOpen && (
+      {menuOpen && navLinks.length > 0 && (
         <nav className={styles.navBar}>
           <button type="button" className={styles.chatIcon} aria-label="Messages">
             <img src={inboxIcon} alt="Messages" className={styles.inboxIcon} />
