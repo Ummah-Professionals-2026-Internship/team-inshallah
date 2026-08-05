@@ -4,6 +4,7 @@ import dotenv from "dotenv";
 import multer from "multer";
 import multerS3 from "multer-s3";
 import path from "path";
+import jwt from "jsonwebtoken";
 import {
   S3Client,
   DeleteObjectCommand,
@@ -346,6 +347,7 @@ app.get("/api/student/profile", requireAuth, async (req, res) => {
     res.status(500).json({ message: "Server error. Please try again later." });
   }
 });
+
 // ===== GET ALL STUDENTS (for admin view) =====
 app.get("/api/students", requireAuth, async (req, res) => {
   try {
@@ -354,24 +356,54 @@ app.get("/api/students", requireAuth, async (req, res) => {
       return res.status(403).json({ message: "Only admins can view all students." });
     }
 
-    const students = await Student.find().populate("user", "email");
+    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const limit = Math.max(parseInt(req.query.limit, 10) || 12, 1);
+    const { industry, search } = req.query;
+
+    const filter = {};
+    if (industry) {
+      filter.industry = industry;
+    }
+    if (search) {
+      filter.name = { $regex: search, $options: "i" };
+    }
+
+    const allMatching = await Student.find(filter).populate("user", "email").sort({ createdAt: -1 });
+
+    const startIndex = (page - 1) * limit;
+    const paginatedResults = allMatching.slice(startIndex, startIndex + limit);
 
     const cardData = await Promise.all(
-      students.map(async (student) => ({
+      paginatedResults.map(async (student) => ({
         id: student._id,
         name: student.name,
+        email: student.user?.email || "",
+        phone: student.phone,
         jobName: student.desiredFutureCareer,
+        desiredFutureCareer: student.desiredFutureCareer,
+        currentJob: student.currentJob,
+        industry: student.industry,
+        major: student.major,
+        academicStanding: student.academicStanding,
         summary: student.otherInformation || `${student.major} major, interested in ${student.industry}.`,
+        otherInformation: student.otherInformation,
         photo: await getSignedFileUrl(student.profilePicture),
+        resume: await getSignedFileUrl(student.resume),
       }))
     );
 
-    res.json({ students: cardData });
+    res.json({
+      students: cardData,
+      currentPage: page,
+      totalPages: Math.ceil(allMatching.length / limit),
+      totalResults: allMatching.length,
+    });
   } catch (err) {
     console.log("GET ALL STUDENTS ERROR:", err);
     res.status(500).json({ message: "Server error. Please try again later." });
   }
 });
+
 // ===== UPDATE STUDENT PROFILE =====
 app.put(
   "/api/student/profile",
@@ -1099,6 +1131,53 @@ app.patch("/api/meetings/:id/reschedule", requireAuth, async (req, res) => {
   }
 });
 
+// ===== PATCH /api/meetings/:id/feedback — submit feedback for a completed meeting =====
+app.patch("/api/meetings/:id/feedback", requireAuth, async (req, res) => {
+  try {
+    const { meetingRating, needsMetRating, mentorRating, comment } = req.body;
+
+    const meeting = await Meeting.findById(req.params.id)
+      .populate("student", "name user")
+      .populate("professional", "name user");
+
+    if (!meeting) {
+      return res.status(404).json({ message: "Meeting not found." });
+    }
+
+    // Only the student or professional on this meeting can leave feedback.
+    const isStudent = meeting.student?.user?.toString() === req.userId;
+    const isProfessional = meeting.professional?.user?.toString() === req.userId;
+    if (!isStudent && !isProfessional) {
+      return res.status(403).json({ message: "You are not part of this meeting." });
+    }
+
+    const feedbackData = {
+      meetingRating,
+      needsMetRating,
+      mentorRating,
+      comment: comment || "",
+      submittedAt: new Date(),
+    };
+
+    // Save under student or professional depending on who's submitting.
+    if (!meeting.feedback) meeting.feedback = {};
+    if (isStudent) {
+      meeting.feedback.student = feedbackData;
+    } else {
+      meeting.feedback.professional = feedbackData;
+    }
+
+    meeting.markModified("feedback");
+    await meeting.save();
+    
+    res.json({ message: "Feedback submitted.", meeting });
+  } catch (err) {
+    console.log("FEEDBACK ERROR:", err);
+    res.status(500).json({ message: "Server error. Please try again later." });
+  }
+});
+
+
 // ===== GET /api/calendar/google/connect — redirect user to Google's login/consent screen =====
 app.get("/api/calendar/google/connect", requireAuth, (req, res) => {
   const authUrl = googleOAuthClient.generateAuthUrl({
@@ -1471,4 +1550,65 @@ app.get("/api/calendar/outlook/busy", requireAuth, async (req, res) => {
 
 app.listen(process.env.PORT, () => {
   console.log(`Server running on port ${process.env.PORT}`);
+});
+
+// ===== GET /api/admin/impersonate/:userId — admin views a specific user's dashboard as them =====
+app.get("/api/admin/impersonate/:studentId", requireAuth, async (req, res) => {
+  try {
+    const adminUser = await User.findById(req.userId);
+    if (!adminUser || adminUser.role !== "admin") {
+      return res.status(403).json({ message: "Only admins can view other users' dashboards." });
+    }
+
+    const student = await Student.findById(req.params.studentId);
+    if (!student) {
+      return res.status(404).json({ message: "Student not found." });
+    }
+
+    const targetUser = await User.findById(student.user);
+    if (!targetUser) {
+      return res.status(404).json({ message: "User not found." });
+    }
+
+    const token = jwt.sign(
+      { sub: targetUser._id, role: targetUser.role },
+      process.env.JWT_SECRET,
+      { expiresIn: "1h" }
+    );
+
+    res.json({ token, role: targetUser.role });
+  } catch (err) {
+    console.log("IMPERSONATE ERROR:", err);
+    res.status(500).json({ message: "Server error. Please try again later." });
+  }
+});
+
+app.get("/api/admin/impersonate-professional/:professionalId", requireAuth, async (req, res) => {
+  try {
+    const adminUser = await User.findById(req.userId);
+    if (!adminUser || adminUser.role !== "admin") {
+      return res.status(403).json({ message: "Only admins can view other users' dashboards." });
+    }
+
+    const professional = await Professional.findById(req.params.professionalId);
+    if (!professional) {
+      return res.status(404).json({ message: "Professional not found." });
+    }
+
+    const targetUser = await User.findById(professional.user);
+    if (!targetUser) {
+      return res.status(404).json({ message: "User not found." });
+    }
+
+    const token = jwt.sign(
+      { sub: targetUser._id, role: targetUser.role },
+      process.env.JWT_SECRET,
+      { expiresIn: "1h" }
+    );
+
+    res.json({ token, role: targetUser.role });
+  } catch (err) {
+    console.log("IMPERSONATE PROFESSIONAL ERROR:", err);
+    res.status(500).json({ message: "Server error. Please try again later." });
+  }
 });

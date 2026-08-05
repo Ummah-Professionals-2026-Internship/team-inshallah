@@ -6,6 +6,7 @@ import inboxIcon from "../assets/inbox chat button.png";
 import MeetingTile from "./MeetingTile";
 import MeetingDetailModal from "./MeetingDetailModal";
 import ScheduleMeeting from "./ScheduleMeeting";
+import FeedbackModal from "./FeedbackModal";
 
 export default function Dashboard({
   userName,
@@ -17,12 +18,14 @@ export default function Dashboard({
   previousMeetings,
   onNavClick,
   onProfileClick,
+  onMenuToggle,
   children,
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [checked, setChecked] = useState({});
   const [selectedMeeting, setSelectedMeeting] = useState(null);
   const [reschedulingMeeting, setReschedulingMeeting] = useState(null);
+  const [feedbackMeeting, setFeedbackMeeting] = useState(null);
 
   const toggleTodo = (index) => {
     setChecked((prev) => ({ ...prev, [index]: !prev[index] }));
@@ -73,7 +76,11 @@ export default function Dashboard({
             className={styles.burgerBtn}
             onClick={(e) => {
               e.stopPropagation(); // Stop click from triggering userArea profile click
-              setMenuOpen((open) => !open);
+              setMenuOpen((open) => {
+                const next = !open;
+                onMenuToggle?.(next);
+                return next;
+              });
             }}
             aria-label="Toggle menu"
             aria-expanded={menuOpen}
@@ -100,7 +107,7 @@ export default function Dashboard({
         </div>
       </header>
 
-      {menuOpen && (
+      {menuOpen && navLinks.length > 0 && (
         <nav className={styles.navBar}>
           <button type="button" className={styles.chatIcon} aria-label="Messages">
             <img src={inboxIcon} alt="Messages" className={styles.inboxIcon} />
@@ -145,6 +152,7 @@ export default function Dashboard({
                           key={meeting.id}
                           meeting={meeting}
                           onClick={(m) => setSelectedMeeting(m)}
+                          onFeedback={(m) => setFeedbackMeeting(m)}
                         />
                       ))
                     )}
@@ -162,6 +170,7 @@ export default function Dashboard({
                           key={meeting.id}
                           meeting={meeting}
                           onClick={(m) => setSelectedMeeting(m)}
+                          onFeedback={(m) => setFeedbackMeeting(m)}
                         />
                       ))
                     )}
@@ -251,6 +260,16 @@ export default function Dashboard({
           onRescheduled={() => window.location.reload()}
         />
       )}
+
+      {feedbackMeeting && (
+        <FeedbackModal
+          meeting={feedbackMeeting}
+          role={userRole === "Professional" ? "professional" : "student"}
+          onClose={() => setFeedbackMeeting(null)}
+          onSubmitted={() => window.location.reload()}
+        />
+      )}
+
     </div>
   );
 }
