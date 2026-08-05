@@ -18,7 +18,7 @@ function statusClass(status) {
   }
 }
 
-export default function MeetingTile({ meeting, onClick }) {
+export default function MeetingTile({ meeting, onClick, onFeedback }) {
   const isCancelled = meeting.status === "cancelled";
 
   return (
@@ -59,7 +59,10 @@ export default function MeetingTile({ meeting, onClick }) {
             <button
               type="button"
               className={styles.iconBtn}
-              onClick={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                onFeedback?.(meeting);
+              }}
               aria-label="Give feedback"
             >
               <img src={feedbackIcon} alt="" className={`${styles.iconImg} ${styles.feedbackImg}`} />
