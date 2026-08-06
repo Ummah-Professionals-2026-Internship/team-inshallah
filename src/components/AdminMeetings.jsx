@@ -116,6 +116,7 @@ export default function AdminMeetings({ onClose }) {
 
   const handleJoinMeeting = (meeting) => {
     const meetingLink =
+      meeting.link ||
       meeting.meetingLink ||
       meeting.meetingUrl ||
       meeting.joinLink ||

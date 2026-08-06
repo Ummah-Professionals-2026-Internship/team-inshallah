@@ -152,11 +152,21 @@
   background: #f0f2f5;
   color: #1a1a1a;
   text-decoration: none;
-  transition: background 0.15s ease;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
 }
 
 .linkBtn:hover {
   background: #d8dadf;
+}
+
+.linkedinBtn {
+  color: #0A66C2;
+}
+
+.linkedinBtn:hover {
+  color: #004182;
 }
 
 .moreBtn {
