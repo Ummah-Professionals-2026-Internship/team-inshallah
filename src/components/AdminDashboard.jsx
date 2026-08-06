@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import Dashboard from "./Dashboard";
 import ViewStudents from "./ViewStudents";
 import ViewProfessionals from "./AdminViewProfessionals";
@@ -108,9 +109,11 @@ function getNotificationTimeLabel(meeting) {
 }
 
 export default function AdminDashboard({ userName = "Admin" }) {
+  const navigate = useNavigate();
   const [activeView, setActiveView] = useState("home");
   const [profilePhoto, setProfilePhoto] = useState("");
   const [displayName, setDisplayName] = useState(userName);
+  const [adminEmail, setAdminEmail] = useState("");
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [showMeetings, setShowMeetings] = useState(false);
 
@@ -132,13 +135,38 @@ export default function AdminDashboard({ userName = "Admin" }) {
     })
       .then((res) => (res.ok ? res.json() : null))
       .then((body) => {
-        if (body?.profile?.profilePicture) {
-          setProfilePhoto(body.profile.profilePicture);
+        const profile = body?.profile || body || {};
+
+        console.log("Admin profile response:", body);
+
+        const resolvedName =
+          profile.name ||
+          profile.fullName ||
+          profile.user?.name ||
+          profile.user?.fullName ||
+          userName;
+
+        const resolvedEmail =
+          profile.email ||
+          profile.user?.email ||
+          "";
+
+        const resolvedPhoto =
+          profile.profilePicture ||
+          profile.photo ||
+          profile.user?.profilePicture ||
+          profile.user?.photo ||
+          "";
+
+        if (resolvedPhoto) {
+          setProfilePhoto(resolvedPhoto);
         }
 
-        if (body?.profile?.name) {
-          setDisplayName(body.profile.name);
+        if (resolvedName) {
+          setDisplayName(resolvedName);
         }
+
+        setAdminEmail(resolvedEmail);
       })
       .catch(() => {});
   }, []);
@@ -211,6 +239,12 @@ export default function AdminDashboard({ userName = "Admin" }) {
   const handleUsersClick = () => {
     setShowUsersMenu((current) => !current);
     setShowNotifications(false);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("adminToken");
+    navigate("/", { replace: true });
   };
 
   return (
@@ -388,6 +422,86 @@ export default function AdminDashboard({ userName = "Admin" }) {
               console.log("Selected professional:", professional)
             }
           />
+        </div>
+      )}
+
+
+      {activeView === "profile" && (
+        <div className={styles.adminProfilePage}>
+          <aside className={styles.adminProfileSidebar}>
+            <div className={styles.adminIdentity}>
+              <div className={styles.adminSidebarAvatar}>
+                {profilePhoto ? (
+                  <img src={profilePhoto} alt={displayName} />
+                ) : (
+                  <span>{displayName.charAt(0).toUpperCase()}</span>
+                )}
+              </div>
+              <p className={styles.adminSidebarName}>{displayName}</p>
+            </div>
+
+            <nav className={styles.adminProfileNav}>
+              <button
+                type="button"
+                className={`${styles.adminProfileNavItem} ${styles.adminProfileNavItemActive}`}
+              >
+                Profile
+              </button>
+
+              <button
+                type="button"
+                className={styles.adminProfileNavItem}
+                onClick={handleLogout}
+              >
+                Logout
+              </button>
+            </nav>
+          </aside>
+
+          <section className={styles.adminProfileContent}>
+            <div className={styles.adminProfileHeader}>
+              <h1>Profile</h1>
+              <button
+                type="button"
+                className={styles.adminProfileClose}
+                onClick={() => openView("home")}
+                aria-label="Close profile"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className={styles.adminProfilePhotoSection}>
+              <div className={styles.adminProfilePhoto}>
+                {profilePhoto ? (
+                  <img src={profilePhoto} alt={displayName} />
+                ) : (
+                  <span>{displayName.charAt(0).toUpperCase()}</span>
+                )}
+              </div>
+              <div>
+                <h2>Profile Picture</h2>
+                <p>Admin account photo</p>
+              </div>
+            </div>
+
+            <div className={styles.adminProfileFields}>
+              <div className={styles.adminProfileField}>
+                <label>Name</label>
+                <div>{displayName || "Admin"}</div>
+              </div>
+
+              <div className={styles.adminProfileField}>
+                <label>Email</label>
+                <div>{adminEmail || "Email not available"}</div>
+              </div>
+
+              <div className={styles.adminProfileField}>
+                <label>Role</label>
+                <div>Admin</div>
+              </div>
+            </div>
+          </section>
         </div>
       )}
 

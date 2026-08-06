@@ -1854,3 +1854,38 @@ app.patch(
     }
   }
 );
+
+app.get("/api/admin/profile", requireAuth, async (req, res) => {
+  try {
+    const admin = await User.findById(req.userId);
+
+    if (!admin || admin.role !== "admin") {
+      return res.status(403).json({
+        message: "Only admins can access this profile.",
+      });
+    }
+
+    return res.json({
+      profile: {
+        name:
+          admin.name ||
+          admin.fullName ||
+          `${admin.firstName || ""} ${admin.lastName || ""}`.trim() ||
+          "Admin",
+
+        email: admin.email || "",
+
+        profilePicture:
+          admin.profilePicture ||
+          admin.photo ||
+          "",
+      },
+    });
+  } catch (err) {
+    console.error("GET ADMIN PROFILE ERROR:", err);
+
+    return res.status(500).json({
+      message: "Server error.",
+    });
+  }
+});
