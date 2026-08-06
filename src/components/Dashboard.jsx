@@ -1,6 +1,7 @@
 // shared dashboard layout - used by both the professional and student dashboards
 import { useState } from "react";
 import styles from "./Dashboard.module.css";
+import ChatPanel from "./ChatPanel";
 import logoFull from "../assets/Brand Kit/Logos/PNGs/horizontal white.png";
 import inboxIcon from "../assets/inbox chat button.png";
 import MeetingTile from "./MeetingTile";
@@ -22,6 +23,7 @@ export default function Dashboard({
   children,
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
   const [checked, setChecked] = useState({});
   const [selectedMeeting, setSelectedMeeting] = useState(null);
   const [reschedulingMeeting, setReschedulingMeeting] = useState(null);
@@ -109,7 +111,16 @@ export default function Dashboard({
 
       {menuOpen && navLinks.length > 0 && (
         <nav className={styles.navBar}>
-          <button type="button" className={styles.chatIcon} aria-label="Messages">
+          <button
+            type="button"
+            className={styles.chatIcon}
+            aria-label="Messages"
+            aria-expanded={chatOpen}
+            onClick={() => {
+              setMenuOpen(false);
+              setChatOpen((isOpen) => !isOpen);
+            }}
+          >
             <img src={inboxIcon} alt="Messages" className={styles.inboxIcon} />
           </button>
           <div className={styles.navLinks}>
@@ -237,6 +248,12 @@ export default function Dashboard({
         )}
       </main>
 
+      <ChatPanel
+        open={chatOpen}
+        onClose={() => setChatOpen(false)}
+        userRole={(userRole || "").toLowerCase()}
+      />
+
       <MeetingDetailModal
         meeting={selectedMeeting}
         onClose={() => setSelectedMeeting(null)}
@@ -244,7 +261,7 @@ export default function Dashboard({
           setReschedulingMeeting(m);
           setSelectedMeeting(null);
         }}
-        onCancelled={(m) => window.location.reload()}
+        onCancelled={() => window.location.reload()}
       />
 
       {reschedulingMeeting && (
@@ -269,7 +286,6 @@ export default function Dashboard({
           onSubmitted={() => window.location.reload()}
         />
       )}
-
     </div>
   );
 }

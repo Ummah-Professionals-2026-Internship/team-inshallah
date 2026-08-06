@@ -18,6 +18,7 @@ import Meeting from "./models/Meeting.js";
 import Availability from "./models/Availability.js";
 import authRoutes from "./routes/auth.js";
 import emailVerificationRoutes from "./routes/emailVerification.js";
+import messageRoutes from "./routes/messages.js";
 import { requireAuth } from "./middleware/auth.js";
 import User from "./models/User.js";
 import { sendMeetingEmail } from "./utils/mailer.js";
@@ -35,6 +36,9 @@ connectDB();
 
 app.use("/api/auth", authRoutes);
 app.use("/api/email-verification", emailVerificationRoutes);
+
+// messaging: conversations + messages (assignment #18)
+app.use("/api/conversations", messageRoutes);
 
 // ===== AWS S3 SETUP =====
 const s3 = new S3Client({
