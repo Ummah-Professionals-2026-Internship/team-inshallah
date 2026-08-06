@@ -88,6 +88,8 @@
 
 .bodyRow {
     display: flex;
+    border-bottom: 1px solid rgba(20, 33, 61, 0.1);
+    /* closes off the grid's bottom edge now that rows border-top instead of -bottom */
 }
 
 .timeColumn {
@@ -104,7 +106,10 @@
     padding: 0 8px 0 0;
     text-align: right;
     display: flex;
-    align-items: flex-end;
+    /* top-aligned: the label marks the gridline at the TOP of its own row (when
+       that hour starts), not the bottom — bottom-alignment made "9:00 AM" sit on
+       the 9:30 line, making a 9:00 event look like it started 30min early */
+    align-items: flex-start;
     justify-content: flex-end;
     box-sizing: border-box;
     white-space: nowrap;
@@ -112,11 +117,11 @@
 }
 
 .timeLabelHour {
-    border-bottom: 1px solid rgba(20, 33, 61, 0.1);
+    border-top: 1px solid rgba(20, 33, 61, 0.1);
 }
 
 .timeLabelDashed {
-    border-bottom: 1px dashed rgba(20, 33, 61, 0.12);
+    border-top: 1px dashed rgba(20, 33, 61, 0.12);
 }
 
 .dayColumn {
@@ -133,11 +138,11 @@
 }
 
 .slotCellHourLine {
-    border-bottom: 1px solid rgba(20, 33, 61, 0.1);
+    border-top: 1px solid rgba(20, 33, 61, 0.1);
 }
 
 .slotCellDashedLine {
-    border-bottom: 1px dashed rgba(20, 33, 61, 0.12);
+    border-top: 1px dashed rgba(20, 33, 61, 0.12);
 }
 
 .slotCell:hover {
@@ -148,12 +153,57 @@
     background: rgba(0, 124, 166, 0.1);
 }
 
-.slotCellBusy {
-    background: repeating-linear-gradient(45deg, #f2c1c1, #f2c1c1 6px, #e8a9a9 6px, #e8a9a9 12px);
-    cursor: not-allowed;
+.availableBlock,
+.busyBlock {
+    position: absolute;
+    border-radius: 4px;
+    padding: 4px 6px;
+    box-sizing: border-box;
+    overflow: visible;
 }
 
-.availableBlock,
+.blockContent {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    border-radius: inherit;
+}
+
+.busyBlock .blockContentExpandable:hover {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: auto;
+    min-height: 100%;
+    padding: 4px 6px;
+    box-sizing: border-box;
+    background: inherit;
+    border: inherit;
+    box-shadow: 0 4px 10px rgba(20, 33, 61, 0.3);
+    z-index: 30;
+    overflow: visible;
+}
+
+.busyBlock .blockContentExpandable:hover .blockRowInline {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0;
+}
+
+.busyBlock .blockContentExpandable:hover .blockTitle,
+.busyBlock .blockContentExpandable:hover .blockTime {
+    white-space: normal;
+}
+
+/* a child's z-index only wins within its own parent's stacking context, so a
+   hovered/expanded block would still render under a sibling with a higher
+   z-index (e.g. an overlapping .availableBlock). Bumping the parent itself
+   lifts the whole thing above every other block, however they're layered. */
+.busyBlock:has(.blockContentExpandable:hover) {
+    z-index: 40;
+}
+
 .availableBlockPreview {
     position: absolute;
     left: 2px;
@@ -162,18 +212,39 @@
     padding: 4px 6px;
     box-sizing: border-box;
     overflow: hidden;
-    z-index: 2;
+    z-index: 3;
 }
 
 .availableBlock {
     background: #e8f4f8;
     border: 1px solid var(--color-teal);
+    z-index: 2;
 }
 
 .availableBlockPreview {
     background: rgba(0, 124, 166, 0.12);
     border: 1px dashed var(--color-teal);
     pointer-events: none;
+}
+
+/* imported busy events sit underneath available blocks and let mouse events pass
+   through, so dragging to add availability over a busy event still works */
+.busyBlock {
+    background: #fdf3d3;
+    border: 1px solid #d6a63f;
+    z-index: 1;
+    pointer-events: none;
+}
+
+/* re-enable hover just on the text so the full title/time tooltip still works,
+   without making the whole block (and its drag-through) hoverable/clickable */
+.busyBlock .blockContent {
+    pointer-events: auto;
+}
+
+.busyBlock .blockTitle,
+.busyBlock .blockTime {
+    color: #7a5c12;
 }
 
 .blockTitle {
@@ -205,6 +276,8 @@
     font-size: 11px;
     line-height: 1;
     cursor: pointer;
+    z-index: 1;
+    pointer-events: auto;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -216,6 +289,40 @@
     color: var(--brand-text-muted);
     font-family: ui-monospace, monospace;
     margin: 10px 0 0;
+}
+
+.legend {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    margin: 8px 0 0;
+}
+
+.legendItem {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: var(--brand-text-muted);
+    font-family: var(--font-brand);
+}
+
+.legendSwatch {
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    display: inline-block;
+}
+
+.legendSwatchBusy {
+    background: #fdf3d3;
+    border: 1px solid #d6a63f;
+}
+
+.legendSwatchAvailable {
+    background: #e8f4f8;
+    border: 1px solid var(--color-teal);
 }
 
 .footer {
@@ -252,4 +359,11 @@
 .blockRowInline .blockTitle,
 .blockRowInline .blockTime {
     margin: 0;
+}
+
+.loadErrorText {
+    text-align: center;
+    font-size: 12px;
+    color: #b02a37;
+    margin: 8px 0 0;
 }

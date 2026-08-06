@@ -4,6 +4,10 @@ import styles from "./Dashboard.module.css";
 import ChatPanel from "./ChatPanel";
 import logoFull from "../assets/Brand Kit/Logos/PNGs/horizontal white.png";
 import inboxIcon from "../assets/inbox chat button.png";
+import MeetingTile from "./MeetingTile";
+import MeetingDetailModal from "./MeetingDetailModal";
+import ScheduleMeeting from "./ScheduleMeeting";
+import FeedbackModal from "./FeedbackModal";
 
 export default function Dashboard({
   userName,
@@ -15,11 +19,15 @@ export default function Dashboard({
   previousMeetings,
   onNavClick,
   onProfileClick,
+  onMenuToggle,
   children,
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [checked, setChecked] = useState({});
+  const [selectedMeeting, setSelectedMeeting] = useState(null);
+  const [reschedulingMeeting, setReschedulingMeeting] = useState(null);
+  const [feedbackMeeting, setFeedbackMeeting] = useState(null);
 
   const toggleTodo = (index) => {
     setChecked((prev) => ({ ...prev, [index]: !prev[index] }));
@@ -70,7 +78,11 @@ export default function Dashboard({
             className={styles.burgerBtn}
             onClick={(e) => {
               e.stopPropagation(); // Stop click from triggering userArea profile click
-              setMenuOpen((open) => !open);
+              setMenuOpen((open) => {
+                const next = !open;
+                onMenuToggle?.(next);
+                return next;
+              });
             }}
             aria-label="Toggle menu"
             aria-expanded={menuOpen}
@@ -97,7 +109,7 @@ export default function Dashboard({
         </div>
       </header>
 
-      {menuOpen && (
+      {menuOpen && navLinks.length > 0 && (
         <nav className={styles.navBar}>
           <button
             type="button"
@@ -147,10 +159,12 @@ export default function Dashboard({
                       <p className={styles.emptyText}>No upcoming meetings yet.</p>
                     ) : (
                       upcomingMeetings.map((meeting) => (
-                        <div key={meeting.id} className={styles.meetingRow}>
-                          <p className={styles.meetingName}>{meeting.with}</p>
-                          <p className={styles.meetingDate}>{meeting.date}</p>
-                        </div>
+                        <MeetingTile
+                          key={meeting.id}
+                          meeting={meeting}
+                          onClick={(m) => setSelectedMeeting(m)}
+                          onFeedback={(m) => setFeedbackMeeting(m)}
+                        />
                       ))
                     )}
                   </div>
@@ -163,10 +177,12 @@ export default function Dashboard({
                       <p className={styles.emptyText}>No previous meetings yet.</p>
                     ) : (
                       previousMeetings.map((meeting) => (
-                        <div key={meeting.id} className={styles.meetingRow}>
-                          <p className={styles.meetingName}>{meeting.with}</p>
-                          <p className={styles.meetingDate}>{meeting.date}</p>
-                        </div>
+                        <MeetingTile
+                          key={meeting.id}
+                          meeting={meeting}
+                          onClick={(m) => setSelectedMeeting(m)}
+                          onFeedback={(m) => setFeedbackMeeting(m)}
+                        />
                       ))
                     )}
                   </div>
@@ -237,6 +253,39 @@ export default function Dashboard({
         onClose={() => setChatOpen(false)}
         userRole={(userRole || "").toLowerCase()}
       />
+
+      <MeetingDetailModal
+        meeting={selectedMeeting}
+        onClose={() => setSelectedMeeting(null)}
+        onReschedule={(m) => {
+          setReschedulingMeeting(m);
+          setSelectedMeeting(null);
+        }}
+        onCancelled={() => window.location.reload()}
+      />
+
+      {reschedulingMeeting && (
+        <ScheduleMeeting
+          professional={{
+            id: reschedulingMeeting.professionalId,
+            userId: reschedulingMeeting.professionalUserId,
+            name: reschedulingMeeting.with,
+            volunteeringFor: [],
+          }}
+          rescheduleMeetingId={reschedulingMeeting.id}
+          onClose={() => setReschedulingMeeting(null)}
+          onRescheduled={() => window.location.reload()}
+        />
+      )}
+
+      {feedbackMeeting && (
+        <FeedbackModal
+          meeting={feedbackMeeting}
+          role={userRole === "Professional" ? "professional" : "student"}
+          onClose={() => setFeedbackMeeting(null)}
+          onSubmitted={() => window.location.reload()}
+        />
+      )}
     </div>
   );
 }

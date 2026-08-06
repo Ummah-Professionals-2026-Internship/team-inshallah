@@ -4,6 +4,7 @@ import dotenv from "dotenv";
 import multer from "multer";
 import multerS3 from "multer-s3";
 import path from "path";
+import jwt from "jsonwebtoken";
 import {
   S3Client,
   DeleteObjectCommand,
@@ -351,6 +352,62 @@ app.get("/api/student/profile", requireAuth, async (req, res) => {
   }
 });
 
+// ===== GET ALL STUDENTS (for admin view) =====
+app.get("/api/students", requireAuth, async (req, res) => {
+  try {
+    const user = await User.findById(req.userId);
+    if (!user || user.role !== "admin") {
+      return res.status(403).json({ message: "Only admins can view all students." });
+    }
+
+    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const limit = Math.max(parseInt(req.query.limit, 10) || 12, 1);
+    const { industry, search } = req.query;
+
+    const filter = {};
+    if (industry) {
+      filter.industry = industry;
+    }
+    if (search) {
+      filter.name = { $regex: search, $options: "i" };
+    }
+
+    const allMatching = await Student.find(filter).populate("user", "email").sort({ createdAt: -1 });
+
+    const startIndex = (page - 1) * limit;
+    const paginatedResults = allMatching.slice(startIndex, startIndex + limit);
+
+    const cardData = await Promise.all(
+      paginatedResults.map(async (student) => ({
+        id: student._id,
+        name: student.name,
+        email: student.user?.email || "",
+        phone: student.phone,
+        jobName: student.desiredFutureCareer,
+        desiredFutureCareer: student.desiredFutureCareer,
+        currentJob: student.currentJob,
+        industry: student.industry,
+        major: student.major,
+        academicStanding: student.academicStanding,
+        summary: student.otherInformation || `${student.major} major, interested in ${student.industry}.`,
+        otherInformation: student.otherInformation,
+        photo: await getSignedFileUrl(student.profilePicture),
+        resume: await getSignedFileUrl(student.resume),
+      }))
+    );
+
+    res.json({
+      students: cardData,
+      currentPage: page,
+      totalPages: Math.ceil(allMatching.length / limit),
+      totalResults: allMatching.length,
+    });
+  } catch (err) {
+    console.log("GET ALL STUDENTS ERROR:", err);
+    res.status(500).json({ message: "Server error. Please try again later." });
+  }
+});
+
 // ===== UPDATE STUDENT PROFILE =====
 app.put(
   "/api/student/profile",
@@ -587,30 +644,30 @@ app.get("/api/professionals", async (req, res) => {
     const paginatedResults = visibleProfessionals.slice(startIndex, startIndex + limit);
 
     const cardData = await Promise.all(
-  paginatedResults.map(
-    async (professional) => ({
-      id: professional._id,
-      userId: professional.user,
-      name: professional.name,
-      jobTitle: professional.jobTitle,
-      summary: professional.summary || professional.aboutMe,
-      aboutMe: professional.aboutMe,                    
-      phone: professional.phone,                        
-      resume: await getSignedFileUrl(professional.resume),
-      photo: await getSignedFileUrl(
-        professional.photo || professional.profilePicture
-      ),
-      linkedin: professional.linkedin,
-      website: professional.website,
-      github: professional.github,
-      other: professional.externalLinks?.other || "",
-      industry: professional.industry,
-      services: professional.services,
-      volunteeringFor: professional.volunteeringFor,
-      otherInformation: professional.otherInformation,  // NEW
-    })
-  )
-);
+      paginatedResults.map(
+        async (professional) => ({
+          id: professional._id,
+          userId: professional.user,
+          name: professional.name,
+          jobTitle: professional.jobTitle,
+          summary: professional.summary || professional.aboutMe,
+          aboutMe: professional.aboutMe,
+          phone: professional.phone,
+          resume: await getSignedFileUrl(professional.resume),
+          photo: await getSignedFileUrl(
+            professional.photo || professional.profilePicture
+          ),
+          linkedin: professional.linkedin,
+          website: professional.website,
+          github: professional.github,
+          other: professional.externalLinks?.other || "",
+          industry: professional.industry,
+          services: professional.services,
+          volunteeringFor: professional.volunteeringFor,
+          otherInformation: professional.otherInformation,  // NEW
+        })
+      )
+    );
 
     res.json({
       professionals: cardData,
@@ -773,6 +830,64 @@ app.delete("/api/availability", requireAuth, async (req, res) => {
   }
 });
 
+// Creates a Google Calendar event WITH a Meet link, using the professional's
+// connected Google Calendar. Returns the Meet link, or null if it can't.
+async function createMeetLink({ professionalUserId, studentName, professionalName, purpose, startDate }) {
+  const connection = await CalendarConnection.findOne({
+    userId: professionalUserId,
+    provider: "google",
+  });
+  if (!connection) return null; // professional hasn't connected Google — no link
+
+  const userClient = new google.auth.OAuth2(
+    process.env.GOOGLE_CLIENT_ID,
+    process.env.GOOGLE_CLIENT_SECRET,
+    process.env.GOOGLE_REDIRECT_URI
+  );
+  userClient.setCredentials({
+    access_token: decryptToken(connection.accessToken),
+    refresh_token: decryptToken(connection.refreshToken),
+  });
+
+  // persist refreshed tokens (same pattern as the busy-times route)
+  userClient.on("tokens", async (tokens) => {
+    try {
+      const update = {};
+      if (tokens.access_token) update.accessToken = encryptToken(tokens.access_token);
+      if (tokens.refresh_token) update.refreshToken = encryptToken(tokens.refresh_token);
+      if (Object.keys(update).length > 0) {
+        await CalendarConnection.findByIdAndUpdate(connection._id, update);
+      }
+    } catch (e) {
+      console.log("MEET LINK TOKEN SAVE ERROR:", e);
+    }
+  });
+
+  const calendar = google.calendar({ version: "v3", auth: userClient });
+
+  const start = new Date(startDate);
+  const end = new Date(start.getTime() + 60 * 60 * 1000); // 1 hour meeting
+
+  const event = await calendar.events.insert({
+    calendarId: "primary",
+    conferenceDataVersion: 1, // REQUIRED to get a Meet link back
+    requestBody: {
+      summary: `Ummah Professionals: ${purpose || "Meeting"} with ${studentName}`,
+      description: `Meeting between ${studentName} and ${professionalName} via Ummah Professionals.`,
+      start: { dateTime: start.toISOString() },
+      end: { dateTime: end.toISOString() },
+      conferenceData: {
+        createRequest: {
+          requestId: `ump-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          conferenceSolutionKey: { type: "hangoutsMeet" },
+        },
+      },
+    },
+  });
+
+  return event.data.hangoutLink || null;
+}
+
 // ===== POST /api/meetings — book a meeting with a professional =====
 app.post("/api/meetings", requireAuth, async (req, res) => {
   try {
@@ -810,34 +925,34 @@ app.post("/api/meetings", requireAuth, async (req, res) => {
     endOfWeek.setDate(endOfWeek.getDate() + 7);
 
     const meetingThisWeek = await Meeting.findOne({
-  professional: professional._id,
-  status: { $in: ["scheduled", "completed"] },
-  date: { $gte: startOfWeek, $lt: endOfWeek },
-});
+      professional: professional._id,
+      status: { $in: ["scheduled", "completed"] },
+      date: { $gte: startOfWeek, $lt: endOfWeek },
+    });
 
-if (meetingThisWeek) {
-  return res.status(400).json({
-    message: "This professional already has a meeting booked this week.",
-  });
-}
+    if (meetingThisWeek) {
+      return res.status(400).json({
+        message: "This professional already has a meeting booked this week.",
+      });
+    }
 
-// enforce: student can only book one meeting per week (with any professional)
-const studentMeetingThisWeek = await Meeting.findOne({
-  student: student._id,
-  status: { $in: ["scheduled", "completed"] },
-  date: { $gte: startOfWeek, $lt: endOfWeek },
-});
+    // enforce: student can only book one meeting per week (with any professional)
+    const studentMeetingThisWeek = await Meeting.findOne({
+      student: student._id,
+      status: { $in: ["scheduled", "completed"] },
+      date: { $gte: startOfWeek, $lt: endOfWeek },
+    });
 
-if (studentMeetingThisWeek) {
-  return res.status(400).json({
-    message: "You already have a meeting booked this week.",
-  });
-}
+    if (studentMeetingThisWeek) {
+      return res.status(400).json({
+        message: "You already have a meeting booked this week.",
+      });
+    }
 
-const studentUser = await User.findById(student.user);
-const professionalUser = await User.findById(professional.user);
+    const studentUser = await User.findById(student.user);
+    const professionalUser = await User.findById(professional.user);
 
-const meeting = await Meeting.create({
+    const meeting = await Meeting.create({
       professional: professional._id,
       student: student._id,
       date: meetingDate,
@@ -847,7 +962,26 @@ const meeting = await Meeting.create({
     });
 
 
+    // Try to generate a Google Meet link using the professional's connected calendar.
+    // If they haven't connected Google, this returns null and we just leave link empty.
+    try {
+      const meetLink = await createMeetLink({
+        professionalUserId: professional.user,
+        studentName: student.name,
+        professionalName: professional.name,
+        purpose,
+        startDate: meetingDate,
+      });
+      if (meetLink) {
+        meeting.link = meetLink;
+        await meeting.save();
+      }
+    } catch (linkErr) {
+      console.log("MEET LINK GENERATION ERROR (booking still succeeded):", linkErr);
+    }
+
   // Send confirmation emails to both parties.
+    // Send confirmation emails to both parties.
     // Wrapped so an email failure never breaks a successful booking.
     try {
       const dateText = meetingDate.toLocaleString("en-US", {
@@ -882,7 +1016,7 @@ const meeting = await Meeting.create({
     } catch (mailErr) {
       console.log("MEETING EMAIL ERROR (booking still succeeded):", mailErr);
     }
-    
+
     res.status(201).json({ message: "Meeting booked!", meeting });
   } catch (err) {
     console.log("BOOK MEETING ERROR:", err);
@@ -921,11 +1055,215 @@ app.get("/api/availability/:professionalUserId", async (req, res) => {
   }
 });
 
+
+// ===== GET /api/meetings — meetings for the logged-in user (student or professional) =====
+app.get("/api/meetings", requireAuth, async (req, res) => {
+  try {
+    // Find the user's student and/or professional profile
+    const student = await Student.findOne({ user: req.userId });
+    const professional = await Professional.findOne({ user: req.userId });
+
+    const filter = [];
+    if (student) filter.push({ student: student._id });
+    if (professional) filter.push({ professional: professional._id });
+
+    if (filter.length === 0) {
+      return res.json({ meetings: [] });
+    }
+
+    const meetings = await Meeting.find({ $or: filter })
+      .populate("student", "name user")
+      .populate("professional", "name user")
+      .sort({ date: 1 });
+
+    res.json({ meetings });
+  } catch (err) {
+    console.log("GET MEETINGS ERROR:", err);
+    res.status(500).json({ message: "Server error. Please try again later." });
+  }
+});
+
+
+// ===== PATCH /api/meetings/:id/cancel — cancel a meeting =====
+app.patch("/api/meetings/:id/cancel", requireAuth, async (req, res) => {
+  try {
+    const { reason } = req.body;
+
+    const meeting = await Meeting.findById(req.params.id)
+      .populate("student", "name user")
+      .populate("professional", "name user");
+
+    if (!meeting) {
+      return res.status(404).json({ message: "Meeting not found." });
+    }
+
+    const isStudent = meeting.student?.user?.toString() === req.userId;
+    const isProfessional = meeting.professional?.user?.toString() === req.userId;
+
+    if (!isStudent && !isProfessional) {
+      return res.status(403).json({ message: "You are not part of this meeting." });
+    }
+
+    meeting.status = "cancelled";
+    meeting.cancelReason = reason || "";
+    meeting.cancelledBy = isStudent ? "student" : "professional";
+    await meeting.save();
+
+    try {
+      const studentUser = await User.findById(meeting.student.user);
+      const professionalUser = await User.findById(meeting.professional.user);
+      const dateText = new Date(meeting.date).toLocaleString("en-US", {
+        weekday: "long", month: "long", day: "numeric", hour: "numeric", minute: "2-digit",
+      });
+
+      if (studentUser?.email) {
+        await sendMeetingEmail(studentUser.email, {
+          recipientName: meeting.student.name,
+          otherPartyName: meeting.professional.name,
+          dateText: `CANCELLED — was ${dateText}`,
+          purpose: meeting.purpose,
+          notes: reason ? `Cancellation reason: ${reason}` : "",
+        });
+      }
+      if (professionalUser?.email) {
+        await sendMeetingEmail(professionalUser.email, {
+          recipientName: meeting.professional.name,
+          otherPartyName: meeting.student.name,
+          dateText: `CANCELLED — was ${dateText}`,
+          purpose: meeting.purpose,
+          notes: reason ? `Cancellation reason: ${reason}` : "",
+        });
+      }
+    } catch (mailErr) {
+      console.log("CANCEL EMAIL ERROR (cancel still succeeded):", mailErr);
+    }
+
+    res.json({ message: "Meeting cancelled.", meeting });
+  } catch (err) {
+    console.log("CANCEL MEETING ERROR:", err);
+    res.status(500).json({ message: "Server error. Please try again later." });
+  }
+});
+
+// ===== PATCH /api/meetings/:id/reschedule — reschedule a meeting =====
+app.patch("/api/meetings/:id/reschedule", requireAuth, async (req, res) => {
+  try {
+    const { date } = req.body;
+    if (!date) {
+      return res.status(400).json({ message: "New date is required." });
+    }
+
+    const newDate = new Date(date);
+    if (isNaN(newDate.getTime())) {
+      return res.status(400).json({ message: "Invalid date." });
+    }
+
+    const meeting = await Meeting.findById(req.params.id)
+      .populate("student", "name user")
+      .populate("professional", "name user");
+
+    if (!meeting) {
+      return res.status(404).json({ message: "Meeting not found." });
+    }
+
+    const isStudent = meeting.student?.user?.toString() === req.userId;
+    const isProfessional = meeting.professional?.user?.toString() === req.userId;
+    if (!isStudent && !isProfessional) {
+      return res.status(403).json({ message: "You are not part of this meeting." });
+    }
+
+    const oldDate = new Date(meeting.date);
+    meeting.date = newDate;
+    meeting.status = "rescheduled";
+    await meeting.save();
+
+    try {
+      const studentUser = await User.findById(meeting.student.user);
+      const professionalUser = await User.findById(meeting.professional.user);
+      const oldText = oldDate.toLocaleString("en-US", { weekday: "long", month: "long", day: "numeric", hour: "numeric", minute: "2-digit" });
+      const newText = newDate.toLocaleString("en-US", { weekday: "long", month: "long", day: "numeric", hour: "numeric", minute: "2-digit" });
+
+      if (studentUser?.email) {
+        await sendMeetingEmail(studentUser.email, {
+          recipientName: meeting.student.name,
+          otherPartyName: meeting.professional.name,
+          dateText: `RESCHEDULED — now ${newText} (was ${oldText})`,
+          purpose: meeting.purpose,
+          notes: meeting.notes,
+        });
+      }
+      if (professionalUser?.email) {
+        await sendMeetingEmail(professionalUser.email, {
+          recipientName: meeting.professional.name,
+          otherPartyName: meeting.student.name,
+          dateText: `RESCHEDULED — now ${newText} (was ${oldText})`,
+          purpose: meeting.purpose,
+          notes: meeting.notes,
+        });
+      }
+    } catch (mailErr) {
+      console.log("RESCHEDULE EMAIL ERROR (reschedule still succeeded):", mailErr);
+    }
+
+    res.json({ message: "Meeting rescheduled.", meeting });
+  } catch (err) {
+    console.log("RESCHEDULE MEETING ERROR:", err);
+    res.status(500).json({ message: "Server error. Please try again later." });
+  }
+});
+
+// ===== PATCH /api/meetings/:id/feedback — submit feedback for a completed meeting =====
+app.patch("/api/meetings/:id/feedback", requireAuth, async (req, res) => {
+  try {
+    const { meetingRating, needsMetRating, mentorRating, comment } = req.body;
+
+    const meeting = await Meeting.findById(req.params.id)
+      .populate("student", "name user")
+      .populate("professional", "name user");
+
+    if (!meeting) {
+      return res.status(404).json({ message: "Meeting not found." });
+    }
+
+    // Only the student or professional on this meeting can leave feedback.
+    const isStudent = meeting.student?.user?.toString() === req.userId;
+    const isProfessional = meeting.professional?.user?.toString() === req.userId;
+    if (!isStudent && !isProfessional) {
+      return res.status(403).json({ message: "You are not part of this meeting." });
+    }
+
+    const feedbackData = {
+      meetingRating,
+      needsMetRating,
+      mentorRating,
+      comment: comment || "",
+      submittedAt: new Date(),
+    };
+
+    // Save under student or professional depending on who's submitting.
+    if (!meeting.feedback) meeting.feedback = {};
+    if (isStudent) {
+      meeting.feedback.student = feedbackData;
+    } else {
+      meeting.feedback.professional = feedbackData;
+    }
+
+    meeting.markModified("feedback");
+    await meeting.save();
+
+    res.json({ message: "Feedback submitted.", meeting });
+  } catch (err) {
+    console.log("FEEDBACK ERROR:", err);
+    res.status(500).json({ message: "Server error. Please try again later." });
+  }
+});
+
+
 // ===== GET /api/calendar/google/connect — redirect user to Google's login/consent screen =====
 app.get("/api/calendar/google/connect", requireAuth, (req, res) => {
   const authUrl = googleOAuthClient.generateAuthUrl({
     access_type: "offline", // needed to get a refresh token
-    scope: ["https://www.googleapis.com/auth/calendar.readonly"],
+    scope: ["https://www.googleapis.com/auth/calendar.events"],
     state: req.userId, // pass the user's ID through so we know who's connecting when Google sends them back
     prompt: "consent",
   });
@@ -1011,18 +1349,57 @@ app.get("/api/calendar/google/busy", requireAuth, async (req, res) => {
 
     const calendar = google.calendar({ version: "v3", auth: userClient });
 
+    // pull every calendar the user has access to, not just "primary"
+    const calendarList = await calendar.calendarList.list();
+    const calendarIds = calendarList.data.items.map((cal) => cal.id);
+
     const now = new Date();
+    // start a day early so same day earlier events still show
+    const syncFrom = new Date(now.getTime() - 24 * 60 * 60 * 1000);
     const oneMonthOut = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
 
-    const response = await calendar.freebusy.query({
-      requestBody: {
-        timeMin: now.toISOString(),
-        timeMax: oneMonthOut.toISOString(),
-        items: [{ id: connection.calendarId }],
-      },
-    });
+    // events.list (not freebusy.query) so we get each event's title, not just the time range
+    const busyTimes = [];
+    for (const calId of calendarIds) {
+      let pageToken = undefined;
+      do {
+        const eventsRes = await calendar.events.list({
+          calendarId: calId,
+          timeMin: syncFrom.toISOString(),
+          timeMax: oneMonthOut.toISOString(),
+          singleEvents: true, // expand recurring events into individual instances
+          orderBy: "startTime",
+          maxResults: 2500,
+          pageToken,
+        });
 
-    const busyTimes = response.data.calendars[connection.calendarId].busy;
+        for (const event of eventsRes.data.items || []) {
+          console.log(
+            "GOOGLE EVENT:",
+            JSON.stringify({
+              summary: event.summary,
+              start: event.start,
+              end: event.end,
+              status: event.status,
+              transparency: event.transparency,
+              recurringEventId: event.recurringEventId,
+            })
+          );
+
+          if (event.status === "cancelled") continue;
+          if (event.transparency === "transparent") continue; // marked "free", not busy
+          if (!event.start?.dateTime || !event.end?.dateTime) continue; // skip all-day events
+
+          busyTimes.push({
+            start: event.start.dateTime,
+            end: event.end.dateTime,
+            title: event.summary || "Busy",
+          });
+        }
+
+        pageToken = eventsRes.data.nextPageToken;
+      } while (pageToken);
+    }
 
     await CalendarConnection.findByIdAndUpdate(connection._id, {
       lastSynced: new Date(),
@@ -1160,12 +1537,15 @@ app.get("/api/calendar/outlook/busy", requireAuth, async (req, res) => {
     let accessToken = decryptToken(connection.accessToken);
 
     const now = new Date();
+    // start a day early (not from "now") so an event already underway or already
+    // finished earlier today still shows up instead of silently disappearing for the day
+    const syncFrom = new Date(now.getTime() - 24 * 60 * 60 * 1000);
     const oneMonthOut = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
 
     const firstUrl = new URL("https://graph.microsoft.com/v1.0/me/calendarView");
-    firstUrl.searchParams.set("startDateTime", now.toISOString());
+    firstUrl.searchParams.set("startDateTime", syncFrom.toISOString());
     firstUrl.searchParams.set("endDateTime", oneMonthOut.toISOString());
-    firstUrl.searchParams.set("$select", "start,end,showAs");
+    firstUrl.searchParams.set("$select", "start,end,showAs,subject");
     firstUrl.searchParams.set("$top", "100");
 
     // fetches one page from Graph using whatever access token is passed in
@@ -1218,12 +1598,13 @@ app.get("/api/calendar/outlook/busy", requireAuth, async (req, res) => {
       nextUrl = data["@odata.nextLink"] || null;
     }
 
-    // match the shape of the Google busy response: [{ start, end }] in ISO UTC
+    // match the shape of the Google busy response: [{ start, end, title }] in ISO UTC
     const busyTimes = events
       .filter((event) => event.showAs !== "free")
       .map((event) => ({
         start: new Date(event.start.dateTime + "Z").toISOString(),
         end: new Date(event.end.dateTime + "Z").toISOString(),
+        title: event.subject || "Busy",
       }));
 
     await CalendarConnection.findByIdAndUpdate(connection._id, {
@@ -1250,4 +1631,171 @@ app.get("/api/calendar/outlook/busy", requireAuth, async (req, res) => {
 
 app.listen(process.env.PORT, () => {
   console.log(`Server running on port ${process.env.PORT}`);
+});
+
+// ===== GET /api/admin/impersonate/:userId — admin views a specific user's dashboard as them =====
+app.get("/api/admin/impersonate/:studentId", requireAuth, async (req, res) => {
+  try {
+    const adminUser = await User.findById(req.userId);
+    if (!adminUser || adminUser.role !== "admin") {
+      return res.status(403).json({ message: "Only admins can view other users' dashboards." });
+    }
+
+    const student = await Student.findById(req.params.studentId);
+    if (!student) {
+      return res.status(404).json({ message: "Student not found." });
+    }
+
+    const targetUser = await User.findById(student.user);
+    if (!targetUser) {
+      return res.status(404).json({ message: "User not found." });
+    }
+
+    const token = jwt.sign(
+      { sub: targetUser._id, role: targetUser.role },
+      process.env.JWT_SECRET,
+      { expiresIn: "1h" }
+    );
+
+    res.json({ token, role: targetUser.role });
+  } catch (err) {
+    console.log("IMPERSONATE ERROR:", err);
+    res.status(500).json({ message: "Server error. Please try again later." });
+  }
+});
+
+app.get("/api/admin/impersonate-professional/:professionalId", requireAuth, async (req, res) => {
+  try {
+    const adminUser = await User.findById(req.userId);
+    if (!adminUser || adminUser.role !== "admin") {
+      return res.status(403).json({ message: "Only admins can view other users' dashboards." });
+    }
+
+    const professional = await Professional.findById(req.params.professionalId);
+    if (!professional) {
+      return res.status(404).json({ message: "Professional not found." });
+    }
+
+    const targetUser = await User.findById(professional.user);
+    if (!targetUser) {
+      return res.status(404).json({ message: "User not found." });
+    }
+
+    const token = jwt.sign(
+      { sub: targetUser._id, role: targetUser.role },
+      process.env.JWT_SECRET,
+      { expiresIn: "1h" }
+    );
+
+    res.json({ token, role: targetUser.role });
+  } catch (err) {
+    console.log("IMPERSONATE PROFESSIONAL ERROR:", err);
+    res.status(500).json({ message: "Server error. Please try again later." });
+  }
+});
+
+// ===== GET ALL MEETINGS (admin view — shows every meeting with both names) =====
+app.get("/api/admin/meetings", requireAuth, async (req, res) => {
+  try {
+    const adminUser = await User.findById(req.userId);
+    if (!adminUser || adminUser.role !== "admin") {
+      return res.status(403).json({ message: "Only admins can view all meetings." });
+    }
+
+    const { type, status, search } = req.query;
+
+    const filter = {};
+    if (type) filter.purpose = type;
+
+    if (status) {
+      const now = new Date();
+      if (status === "upcoming") {
+        filter.status = "scheduled";
+        filter.date = { $gte: now };
+      } else if (status === "completed") {
+        filter.$or = [
+          { status: "completed" },
+          { status: "scheduled", date: { $lt: now } },
+        ];
+      } else if (status === "cancelled") {
+        filter.status = "cancelled";
+      } else if (status === "rescheduled") {
+        filter.status = "rescheduled";
+      }
+    }
+
+    const meetings = await Meeting.find(filter)
+      .populate("student", "name")
+      .populate("professional", "name")
+      .sort({ date: 1 });
+
+    let results = meetings.map((m) => ({
+      id: m._id,
+      studentName: m.student?.name || "Unknown Student",
+      professionalName: m.professional?.name || "Unknown Professional",
+      date: m.date,
+      purpose: m.purpose,
+      status: m.status,
+      notes: m.notes,
+    }));
+
+    if (search) {
+      const q = search.toLowerCase();
+      results = results.filter(
+        (r) =>
+          r.studentName.toLowerCase().includes(q) ||
+          r.professionalName.toLowerCase().includes(q) ||
+          r.purpose.toLowerCase().includes(q)
+      );
+    }
+
+    res.json({ meetings: results });
+  } catch (err) {
+    console.log("GET ALL MEETINGS ERROR:", err);
+    res.status(500).json({ message: "Server error. Please try again later." });
+  }
+});
+
+
+app.patch("/api/admin/meetings/:id/cancel", requireAuth, async (req, res) => {
+  try {
+    const adminUser = await User.findById(req.userId);
+
+    if (!adminUser || adminUser.role !== "admin") {
+      return res.status(403).json({
+        message: "Only admins can cancel meetings.",
+      });
+    }
+
+    const meeting = await Meeting.findById(req.params.id);
+
+    if (!meeting) {
+      return res.status(404).json({
+        message: "Meeting not found.",
+      });
+    }
+
+    if (meeting.status === "cancelled") {
+      return res.status(400).json({
+        message: "This meeting has already been cancelled.",
+      });
+    }
+
+    meeting.status = "cancelled";
+    meeting.cancelReason = req.body.reason || "";
+    meeting.cancelledBy = "admin";
+
+    await meeting.save();
+
+    res.json({
+      message: "Meeting cancelled successfully.",
+      meeting,
+    });
+  } catch (err) {
+    console.error("ADMIN CANCEL ERROR:", err);
+
+    res.status(500).json({
+      message: "Server error.",
+    });
+  }
 });
