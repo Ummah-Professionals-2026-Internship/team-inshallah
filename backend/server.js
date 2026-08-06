@@ -5,12 +5,8 @@ import multer from "multer";
 import multerS3 from "multer-s3";
 import path from "path";
 import jwt from "jsonwebtoken";
-import {
-  S3Client,
-  DeleteObjectCommand,
-  GetObjectCommand,
-} from "@aws-sdk/client-s3";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { DeleteObjectCommand } from "@aws-sdk/client-s3";
+import { s3, getSignedFileUrl } from "./utils/s3.js";
 import connectDB from "./config/db.js";
 import Student from "./models/Student.js";
 import Professional from "./models/Professional.js";
@@ -41,42 +37,8 @@ app.use("/api/email-verification", emailVerificationRoutes);
 app.use("/api/conversations", messageRoutes);
 
 // ===== AWS S3 SETUP =====
-const s3 = new S3Client({
-  region: process.env.AWS_REGION,
-  credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-  },
-});
-
-async function getSignedFileUrl(storedUrl) {
-  if (!storedUrl) return "";
-
-  const key = storedUrl.split(".amazonaws.com/")[1];
-  if (!key) return storedUrl;
-
-  const params = {
-    Bucket: process.env.AWS_BUCKET_NAME,
-    Key: key,
-  };
-
-  const lowerKey = key.toLowerCase();
-
-  if (lowerKey.endsWith(".pdf")) {
-    params.ResponseContentDisposition = "inline";
-    params.ResponseContentType = "application/pdf";
-  } else if (lowerKey.endsWith(".docx")) {
-    params.ResponseContentDisposition = "attachment";
-    params.ResponseContentType =
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-  } else if (lowerKey.endsWith(".doc")) {
-    params.ResponseContentDisposition = "attachment";
-    params.ResponseContentType = "application/msword";
-  }
-
-  const command = new GetObjectCommand(params);
-  return getSignedUrl(s3, command, { expiresIn: 3600 });
-}
+// the client and URL signing live in utils/s3.js so the messaging routes can
+// sign avatars with the same logic
 
 const fileFilter = (req, file, cb) => {
   const resumeTypes = [".pdf", ".doc", ".docx"];
