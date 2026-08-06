@@ -577,7 +577,7 @@ app.get("/api/professionals", async (req, res) => {
   try {
     const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
     const limit = Math.max(parseInt(req.query.limit, 10) || 12, 1);
-    const { industry, services } = req.query;
+    const { industry } = req.query;
 
     const filter = {};
 
@@ -585,10 +585,10 @@ app.get("/api/professionals", async (req, res) => {
       filter.industry = industry;
     }
 
-    if (services) {
-      const serviceList = services.split(",").map((service) => service.trim()).filter(Boolean);
-      if (serviceList.length > 0) {
-        filter.services = { $in: serviceList };
+    if (req.query.volunteeringFor) {
+      const volunteeringForList = req.query.volunteeringFor.split(",").map((item) => item.trim()).filter(Boolean);
+      if (volunteeringForList.length > 0) {
+        filter.volunteeringFor = { $in: volunteeringForList };
       }
     }
 
