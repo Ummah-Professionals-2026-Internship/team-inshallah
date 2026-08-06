@@ -105,7 +105,7 @@ router.post("/login", async (req, res) => {
     // everyone else must log in from the tab matching their registered role.
     if (role && user.role !== "admin" && user.role !== role) {
       return res.status(403).json({
-        message: `This account is registered as a ${user.role}. Please log in from the ${user.role} tab.`,
+        message: `This account is registered as a ${user.role}.`,
       });
     }
 
