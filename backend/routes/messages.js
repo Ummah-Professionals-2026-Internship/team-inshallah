@@ -7,6 +7,7 @@ import Student from "../models/Student.js";
 import Professional from "../models/Professional.js";
 import Meeting from "../models/Meeting.js";
 import { sendNewMessageEmail } from "../utils/mailer.js";
+import { getSignedFileUrl } from "../utils/s3.js";
 import { requireAuth } from "../middleware/auth.js";
 
 // Issues #18 (backend) and #28 (who may message whom)
@@ -74,6 +75,18 @@ function otherParticipantId(conversation, userId) {
   return other ? String(other) : null;
 }
 
+// Avatars are stored as plain S3 URLs on a private bucket, so they have to be
+// signed before the browser can load them. A signing failure drops the picture
+// rather than taking the whole inbox down with it.
+async function signAvatar(storedUrl) {
+  try {
+    return await getSignedFileUrl(storedUrl || "");
+  } catch (err) {
+    console.log("AVATAR SIGN ERROR (non-fatal):", err.message);
+    return "";
+  }
+}
+
 // look up a friendly name/photo for a user. Names live on the Student /
 // Professional profile documents; admins have no profile, so we fall back to
 // the account email and the inbox still has something to show.
@@ -89,7 +102,10 @@ async function resolveParticipant(userId) {
     name: profile?.name || user?.email || "Unknown user",
     email: user?.email || null,
     role: user?.role || null,
-    profilePicture: profile?.profilePicture || profile?.photo || "",
+    // the bucket is private, so the stored URL has to be signed to be viewable
+    profilePicture: await signAvatar(
+      profile?.profilePicture || profile?.photo
+    ),
   };
 }
 
@@ -453,7 +469,15 @@ router.get("/contacts", requireAuth, async (req, res) => {
       add(admin._id, admin.email, "admin", "", "Admin");
     }
 
-    return res.json({ contacts });
+    // signed last, in one pass, so the list is built without awaiting per row
+    const signed = await Promise.all(
+      contacts.map(async (contact) => ({
+        ...contact,
+        profilePicture: await signAvatar(contact.profilePicture),
+      }))
+    );
+
+    return res.json({ contacts: signed });
   } catch (err) {
     console.log("CONTACTS ERROR:", err);
     return res
