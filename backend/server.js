@@ -1531,3 +1531,109 @@ app.get("/api/admin/impersonate-professional/:professionalId", requireAuth, asyn
     res.status(500).json({ message: "Server error. Please try again later." });
   }
 });
+
+// ===== GET ALL MEETINGS (admin view — shows every meeting with both names) =====
+app.get("/api/admin/meetings", requireAuth, async (req, res) => {
+  try {
+    const adminUser = await User.findById(req.userId);
+    if (!adminUser || adminUser.role !== "admin") {
+      return res.status(403).json({ message: "Only admins can view all meetings." });
+    }
+
+    const { type, status, search } = req.query;
+
+    const filter = {};
+    if (type) filter.purpose = type;
+
+    if (status) {
+      const now = new Date();
+      if (status === "upcoming") {
+        filter.status = "scheduled";
+        filter.date = { $gte: now };
+      } else if (status === "completed") {
+        filter.$or = [
+          { status: "completed" },
+          { status: "scheduled", date: { $lt: now } },
+        ];
+      } else if (status === "cancelled") {
+        filter.status = "cancelled";
+      } else if (status === "rescheduled") {
+        filter.status = "rescheduled";
+      }
+    }
+
+    const meetings = await Meeting.find(filter)
+      .populate("student", "name")
+      .populate("professional", "name")
+      .sort({ date: 1 });
+
+    let results = meetings.map((m) => ({
+      id: m._id,
+      studentName: m.student?.name || "Unknown Student",
+      professionalName: m.professional?.name || "Unknown Professional",
+      date: m.date,
+      purpose: m.purpose,
+      status: m.status,
+      notes: m.notes,
+    }));
+
+    if (search) {
+      const q = search.toLowerCase();
+      results = results.filter(
+        (r) =>
+          r.studentName.toLowerCase().includes(q) ||
+          r.professionalName.toLowerCase().includes(q) ||
+          r.purpose.toLowerCase().includes(q)
+      );
+    }
+
+    res.json({ meetings: results });
+  } catch (err) {
+    console.log("GET ALL MEETINGS ERROR:", err);
+    res.status(500).json({ message: "Server error. Please try again later." });
+  }
+});
+
+
+app.patch("/api/admin/meetings/:id/cancel", requireAuth, async (req, res) => {
+  try {
+    const adminUser = await User.findById(req.userId);
+
+    if (!adminUser || adminUser.role !== "admin") {
+      return res.status(403).json({
+        message: "Only admins can cancel meetings.",
+      });
+    }
+
+    const meeting = await Meeting.findById(req.params.id);
+
+    if (!meeting) {
+      return res.status(404).json({
+        message: "Meeting not found.",
+      });
+    }
+
+    if (meeting.status === "cancelled") {
+      return res.status(400).json({
+        message: "This meeting has already been cancelled.",
+      });
+    }
+
+    meeting.status = "cancelled";
+    meeting.cancelReason = req.body.reason || "";
+    meeting.cancelledBy = "admin";
+
+    await meeting.save();
+
+    res.json({
+      message: "Meeting cancelled successfully.",
+      meeting,
+    });
+  } catch (err) {
+    console.error("ADMIN CANCEL ERROR:", err);
+
+    res.status(500).json({
+      message: "Server error.",
+    });
+  }
+});
