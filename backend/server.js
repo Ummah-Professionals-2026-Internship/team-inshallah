@@ -968,6 +968,9 @@ app.post("/api/meetings", requireAuth, async (req, res) => {
         purpose,
         startDate: meetingDate,
       });
+
+      console.log("MEET LINK RETURNED:", meetLink);
+
       if (meetLink) {
         meeting.link = meetLink;
         await meeting.save();
