@@ -20,6 +20,8 @@ function transformMeeting(m) {
     professionalUserId: m.professional?.user,
     professionalId: m.professional?._id,
     with: m.student?.name || "Unknown",
+    // the other party's user account, for the tile's chat button
+    withUserId: m.student?.user,
     day: d.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" }),
     time: d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
     type: m.purpose || "Meeting",
