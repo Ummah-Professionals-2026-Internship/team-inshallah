@@ -973,20 +973,9 @@ app.post("/api/meetings", requireAuth, async (req, res) => {
         startDate: meetingDate,
       });
 
-      console.log("================================");
-      console.log("Generated Meet Link:", meetLink);
-      console.log("Professional User ID:", professional.user);
-      console.log("Meeting ID:", meeting._id.toString());
-      console.log("================================");
-
       if (meetLink) {
         meeting.link = meetLink;
         await meeting.save();
-
-        console.log("Meeting saved successfully with link:");
-        console.log(meeting.link);
-      } else {
-        console.log("No Meet link was returned from Google.");
       }
     } catch (linkErr) {
       console.log("MEET LINK GENERATION ERROR (booking still succeeded):", linkErr);
@@ -1746,8 +1735,16 @@ app.get("/api/admin/meetings", requireAuth, async (req, res) => {
     }
 
     const meetings = await Meeting.find(filter)
-      .populate("student", "name")
-      .populate("professional", "name")
+      .populate({
+        path: "student",
+        select: "name major userId",
+        populate: { path: "userId", select: "email" },
+      })
+      .populate({
+        path: "professional",
+        select: "name jobTitle employer userId",
+        populate: { path: "userId", select: "email" },
+      })
       .sort({ date: 1 });
 
     let results = meetings.map((meeting) => ({
@@ -1756,15 +1753,30 @@ app.get("/api/admin/meetings", requireAuth, async (req, res) => {
       studentName:
         meeting.student?.name || "Unknown Student",
 
+      studentEmail:
+        meeting.student?.userId?.email || "",
+
+      studentMajor:
+        meeting.student?.major || "",
+
       professionalName:
         meeting.professional?.name || "Unknown Professional",
+
+      professionalEmail:
+        meeting.professional?.userId?.email || "",
+
+      professionalJobTitle:
+        meeting.professional?.jobTitle || "",
+
+      professionalCompany:
+        meeting.professional?.employer || "",
 
       date: meeting.date,
       purpose: meeting.purpose,
       status: meeting.status,
       notes: meeting.notes,
 
-      // This matches the "link" field in Meeting.js
+      // Important: this is the field stored in Meeting.js
       link: meeting.link || "",
 
       createdAt: meeting.createdAt,
@@ -1879,6 +1891,9 @@ app.get("/api/admin/profile", requireAuth, async (req, res) => {
           admin.profilePicture ||
           admin.photo ||
           "",
+
+        role:
+          admin.role,
       },
     });
   } catch (err) {
