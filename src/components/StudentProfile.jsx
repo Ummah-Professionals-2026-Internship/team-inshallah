@@ -3,7 +3,6 @@ import { API_BASE_URL } from "../config";
 import { useNavigate } from "react-router-dom";
 import "./Profile.css";
 import profileSettingIcon from "../assets/Profile setting icon.svg";
-import settingsIcon from "../assets/Settings.svg";
 import logoutIcon from "../assets/Logout icon.svg";
 
 // Student profile edit screen — wired to the backend.
@@ -242,9 +241,6 @@ useEffect(() => {
           <nav className="sp-nav">
             <button type="button" className="sp-nav-item sp-nav-active">
               <span className="sp-nav-icon" aria-hidden="true"><img src={profileSettingIcon} alt="Profile" /></span> Profile
-            </button>
-            <button type="button" className="sp-nav-item">
-              <span className="sp-nav-icon" aria-hidden="true"><img src={settingsIcon} alt="Settings" /></span> Settings
             </button>
             <button type="button" className="sp-nav-item" onClick={() => setShowLogoutConfirm(true)}>
               <span className="sp-nav-icon" aria-hidden="true"><img src={logoutIcon} alt="Logout" /></span> Logout

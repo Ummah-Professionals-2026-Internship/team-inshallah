@@ -69,6 +69,8 @@
   justify-content: center;
   overflow: hidden;
   flex-shrink: 0;
+  position: relative;
+  cursor: pointer;
 }
 
 .avatar img {
@@ -76,6 +78,29 @@
   height: 100%;
   object-fit: cover;
 }
+
+.avatarOverlay {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  pointer-events: none;
+}
+
+.avatar:hover .avatarOverlay {
+  opacity: 1;
+}
+
+.avatarOverlay svg {
+  width: 28px;
+  height: 28px;
+}
+
 
 .burgerBtn {
   background: transparent;

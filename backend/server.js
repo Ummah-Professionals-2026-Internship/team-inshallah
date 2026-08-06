@@ -972,7 +972,7 @@ app.post("/api/meetings", requireAuth, async (req, res) => {
         purpose,
         startDate: meetingDate,
       });
-
+      
       if (meetLink) {
         meeting.link = meetLink;
         await meeting.save();
