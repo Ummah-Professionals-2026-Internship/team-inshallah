@@ -8,12 +8,6 @@ import { API_BASE_URL } from "../config";
 import chatIconSrc from "../assets/chaticon.svg";
 import bellIconSrc from "../assets/newnotificon.svg";
 
-const ADMIN_NAV_LINKS = [
-  "View Students",
-  "View Professionals",
-  "View all Meetings",
-];
-
 function PeopleIcon() {
   return (
     <svg
@@ -372,26 +366,6 @@ export default function AdminDashboard({ userName = "Admin" }) {
             </div>
           </div>
 
-          <div className={styles.toolbarLinks}>
-            {ADMIN_NAV_LINKS.map((label) => (
-              <button
-                key={label}
-                type="button"
-                className={styles.toolbarLinkButton}
-                onClick={() => {
-                  if (label === "View Students") {
-                    openView("students");
-                  } else if (label === "View Professionals") {
-                    openView("professionals");
-                  } else if (label === "View all Meetings") {
-                    openMeetings();
-                  }
-                }}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
         </nav>
       )}
 

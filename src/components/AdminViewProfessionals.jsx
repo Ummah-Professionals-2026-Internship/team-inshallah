@@ -131,7 +131,7 @@ export default function AdminViewProfessionals({ onClose, onSelectProfessional }
                     href={professional.linkedin}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className={styles.linkBtn}
+                    className={`${styles.linkBtn} ${styles.linkedinBtn}`}
                     aria-label={`${professional.name}'s LinkedIn`}
                     onClick={(e) => e.stopPropagation()}
                   >
