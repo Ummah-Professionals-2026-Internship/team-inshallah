@@ -20,10 +20,12 @@ export default function LoginPage() {
 
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
+    const [error, setError] = useState("");
 
     // handle login form submission
     const handleLogin = async (e) => {
         e.preventDefault();
+        setError("");
         try {
             const res = await fetch(`${API_BASE_URL}/api/auth/login`, {
                 method: "POST",
@@ -32,7 +34,7 @@ export default function LoginPage() {
             });
             const data = await res.json();
             if (!res.ok) {
-                alert(data.message);
+                setError(data.message || "Unable to log in. Please try again.");
                 return;
             }
             // save token + user info for later
@@ -59,13 +61,19 @@ export default function LoginPage() {
                 : "/professional-dashboard"
             );
         } catch (err) {
-            alert("something went wrong. is the server running?");
+            setError("Something went wrong. Is the server running?");
         }
     };
 
     // handle "sign up" link click
     const handleSignUp = () => {
         navigate("/signup");
+    };
+
+    // clear any stale error when switching tabs
+    const handleRoleChange = (nextRole) => {
+        setRole(nextRole);
+        setError("");
     };
 
     return (
@@ -105,7 +113,7 @@ export default function LoginPage() {
                         {/* student tab */}
                         <button
                             className={`${styles.roleBtn} ${role === "student" ? styles.roleBtnActive : ""}`}
-                            onClick={() => setRole("student")}
+                            onClick={() => handleRoleChange("student")}
                             type="button"
                         >
                             Student
@@ -114,7 +122,7 @@ export default function LoginPage() {
                         {/* professional tab */}
                         <button
                             className={`${styles.roleBtn} ${role === "professional" ? styles.roleBtnActive : ""}`}
-                            onClick={() => setRole("professional")}
+                            onClick={() => handleRoleChange("professional")}
                             type="button"
                         >
                             Professional
@@ -159,6 +167,9 @@ export default function LoginPage() {
                                 autoComplete="current-password"
                             />
                         </div>
+
+                        {/* error message, shown when login fails (eg. wrong tab) */}
+                        {error && <p className={styles.errorText}>{error}</p>}
 
                         {/* login button */}
                         <button className={styles.loginBtn} type="submit">
