@@ -1,12 +1,15 @@
 .adminToolbar {
+  position: relative;
+  z-index: 150;
   display: flex;
   align-items: center;
   justify-content: space-between;
   background: #007ca6;
   padding: 14px 32px;
-  margin: -24px -32px 24px -32px;
+  margin: -24px -32px 24px;
   width: calc(100% + 64px);
   box-sizing: border-box;
+  overflow: visible;
 }
 
 .leftIconsGroup {
@@ -15,28 +18,191 @@
   gap: 20px;
 }
 
-.iconBtn {
+.toolbarMenuWrap {
+  position: relative;
   display: flex;
   align-items: center;
+}
+
+.iconBtn {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   padding: 4px;
   background: none;
   border: none;
+  border-radius: 8px;
   cursor: pointer;
+}
+
+.iconBtn:hover,
+.iconBtnActive {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.adminToolbar .iconBtn img,
+.adminToolbar .iconBtn svg {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+}
+
+.iconBtn:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 3px;
 }
 
 .notificationDot {
   position: absolute;
-  top: 2px;
-  right: 2px;
-  width: 12px;
-  height: 12px;
+  top: 1px;
+  right: 1px;
+  width: 10px;
+  height: 10px;
   border: 2px solid #007ca6;
   border-radius: 50%;
   background: #e0433c;
 }
 
+.usersMenu,
+.notificationMenu {
+  position: absolute;
+  top: calc(100% + 12px);
+  left: 0;
+  z-index: 500;
+  background: #ffffff;
+  border: 1px solid #d8dadf;
+  border-radius: 10px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18);
+  overflow: hidden;
+}
+
+.usersMenu {
+  width: 210px;
+  padding: 8px;
+}
+
+.usersMenuItem {
+  width: 100%;
+  padding: 11px 12px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: #1a1a1a;
+  font-family: "Montserrat", system-ui, sans-serif;
+  font-size: 0.9rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.usersMenuItem:hover {
+  background: #eef8fb;
+  color: #007ca6;
+}
+
+.notificationMenu {
+  width: 340px;
+  max-height: 430px;
+  overflow-y: auto;
+}
+
+.menuHeader {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  background: #ffffff;
+  border-bottom: 1px solid #e3e5e8;
+}
+
+.menuHeader h3 {
+  margin: 0;
+  color: #1a1a1a;
+  font-family: "Montserrat", system-ui, sans-serif;
+  font-size: 1rem;
+}
+
+.refreshButton {
+  padding: 0;
+  border: none;
+  background: none;
+  color: #007ca6;
+  font-family: "Montserrat", system-ui, sans-serif;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.notificationItem {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  gap: 5px;
+  padding: 12px 16px;
+  border: none;
+  border-bottom: 1px solid #edf0f2;
+  background: #ffffff;
+  text-align: left;
+  cursor: pointer;
+}
+
+.notificationItem:hover {
+  background: #f5fafc;
+}
+
+.notificationText {
+  color: #1a1a1a;
+  font-family: "Montserrat", system-ui, sans-serif;
+  font-size: 0.86rem;
+  line-height: 1.4;
+}
+
+.notificationTime {
+  color: #777d84;
+  font-size: 0.75rem;
+}
+
+.menuEmpty,
+.menuError {
+  margin: 0;
+  padding: 24px 16px;
+  font-family: "Montserrat", system-ui, sans-serif;
+  font-size: 0.86rem;
+  text-align: center;
+}
+
+.menuEmpty {
+  color: #777d84;
+}
+
+.menuError {
+  color: #a32620;
+}
+
+.viewAllButton {
+  position: sticky;
+  bottom: 0;
+  width: 100%;
+  padding: 12px 16px;
+  border: none;
+  background: #ffffff;
+  color: #007ca6;
+  font-family: "Montserrat", system-ui, sans-serif;
+  font-size: 0.86rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.viewAllButton:hover {
+  background: #eef8fb;
+}
+
 .toolbarLinks {
   display: flex;
+  align-items: center;
   gap: 36px;
 }
 
@@ -55,6 +221,12 @@
   text-decoration: underline;
 }
 
+.toolbarLinkButton:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 5px;
+  border-radius: 2px;
+}
+
 .pagePadding {
   padding: 0 0 24px;
   color: initial;
@@ -71,10 +243,6 @@
   opacity: 1 !important;
   filter: none !important;
 }
-
-/* ===========================
-   DASHBOARD LAYOUT
-=========================== */
 
 .homeGrid {
   display: flex;
@@ -103,11 +271,9 @@
   width: 100%;
   min-height: 0;
   box-sizing: border-box;
-
   background: #ffffff;
   border: 1px solid #d8dadf;
   border-radius: 4px;
-
   box-shadow:
     0 4px 12px rgba(0, 0, 0, 0.05),
     0 1px 3px rgba(0, 0, 0, 0.03);
@@ -126,11 +292,9 @@
   min-height: 220px;
   padding: 12px 16px;
   box-sizing: border-box;
-
   background: #ffffff;
   border: 1px solid #d8dadf;
   border-radius: 4px;
-
   box-shadow:
     0 4px 12px rgba(0, 0, 0, 0.05),
     0 1px 3px rgba(0, 0, 0, 0.03);
@@ -142,10 +306,6 @@
   font-size: 0.95rem;
   font-style: italic;
 }
-
-/* ===========================
-   RESPONSIVE
-=========================== */
 
 @media (max-width: 1100px) {
   .homeGrid {
@@ -161,5 +321,34 @@
   .verticalBox {
     flex: none;
     min-height: 350px;
+  }
+}
+
+@media (max-width: 750px) {
+  .adminToolbar {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 16px;
+    padding: 14px 20px;
+    margin: -24px -20px 24px;
+    width: calc(100% + 40px);
+  }
+
+  .toolbarLinks {
+    width: 100%;
+    flex-wrap: wrap;
+    gap: 16px 24px;
+  }
+
+  .notificationMenu {
+    width: min(340px, calc(100vw - 40px));
+  }
+
+  .pageTitle {
+    font-size: 32px;
+  }
+
+  .sectionTitle {
+    font-size: 26px;
   }
 }
