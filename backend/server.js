@@ -18,6 +18,7 @@ import Meeting from "./models/Meeting.js";
 import Availability from "./models/Availability.js";
 import authRoutes from "./routes/auth.js";
 import emailVerificationRoutes from "./routes/emailVerification.js";
+import messageRoutes from "./routes/messages.js";
 import { requireAuth } from "./middleware/auth.js";
 import User from "./models/User.js";
 import { sendMeetingEmail } from "./utils/mailer.js";
@@ -35,6 +36,9 @@ connectDB();
 
 app.use("/api/auth", authRoutes);
 app.use("/api/email-verification", emailVerificationRoutes);
+
+// messaging: conversations + messages (assignment #18)
+app.use("/api/conversations", messageRoutes);
 
 // ===== AWS S3 SETUP =====
 const s3 = new S3Client({
@@ -577,7 +581,7 @@ app.get("/api/professionals", async (req, res) => {
   try {
     const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
     const limit = Math.max(parseInt(req.query.limit, 10) || 12, 1);
-    const { industry, services } = req.query;
+    const { industry } = req.query;
 
     const filter = {};
 
@@ -585,10 +589,10 @@ app.get("/api/professionals", async (req, res) => {
       filter.industry = industry;
     }
 
-    if (services) {
-      const serviceList = services.split(",").map((service) => service.trim()).filter(Boolean);
-      if (serviceList.length > 0) {
-        filter.services = { $in: serviceList };
+    if (req.query.volunteeringFor) {
+      const volunteeringForList = req.query.volunteeringFor.split(",").map((item) => item.trim()).filter(Boolean);
+      if (volunteeringForList.length > 0) {
+        filter.volunteeringFor = { $in: volunteeringForList };
       }
     }
 
@@ -968,9 +972,7 @@ app.post("/api/meetings", requireAuth, async (req, res) => {
         purpose,
         startDate: meetingDate,
       });
-
-      console.log("MEET LINK RETURNED:", meetLink);
-
+      
       if (meetLink) {
         meeting.link = meetLink;
         await meeting.save();
@@ -979,7 +981,6 @@ app.post("/api/meetings", requireAuth, async (req, res) => {
       console.log("MEET LINK GENERATION ERROR (booking still succeeded):", linkErr);
     }
 
-  // Send confirmation emails to both parties.
     // Send confirmation emails to both parties.
     // Wrapped so an email failure never breaks a successful booking.
     try {
@@ -1693,28 +1694,38 @@ app.get("/api/admin/impersonate-professional/:professionalId", requireAuth, asyn
   }
 });
 
-// ===== GET ALL MEETINGS (admin view — shows every meeting with both names) =====
+
+// ===== GET ALL MEETINGS (admin view) =====
 app.get("/api/admin/meetings", requireAuth, async (req, res) => {
   try {
     const adminUser = await User.findById(req.userId);
+
     if (!adminUser || adminUser.role !== "admin") {
-      return res.status(403).json({ message: "Only admins can view all meetings." });
+      return res.status(403).json({
+        message: "Only admins can view all meetings.",
+      });
     }
 
     const { type, status, search } = req.query;
-
     const filter = {};
-    if (type) filter.purpose = type;
+
+    if (type) {
+      filter.purpose = type;
+    }
 
     if (status) {
       const now = new Date();
+
       if (status === "upcoming") {
         filter.status = "scheduled";
         filter.date = { $gte: now };
       } else if (status === "completed") {
         filter.$or = [
           { status: "completed" },
-          { status: "scheduled", date: { $lt: now } },
+          {
+            status: "scheduled",
+            date: { $lt: now },
+          },
         ];
       } else if (status === "cancelled") {
         filter.status = "cancelled";
@@ -1724,76 +1735,171 @@ app.get("/api/admin/meetings", requireAuth, async (req, res) => {
     }
 
     const meetings = await Meeting.find(filter)
-      .populate("student", "name")
-      .populate("professional", "name")
+      .populate({
+        path: "student",
+        select: "name major userId",
+        populate: { path: "userId", select: "email" },
+      })
+      .populate({
+        path: "professional",
+        select: "name jobTitle employer userId",
+        populate: { path: "userId", select: "email" },
+      })
       .sort({ date: 1 });
 
-    let results = meetings.map((m) => ({
-      id: m._id,
-      studentName: m.student?.name || "Unknown Student",
-      professionalName: m.professional?.name || "Unknown Professional",
-      date: m.date,
-      purpose: m.purpose,
-      status: m.status,
-      notes: m.notes,
+    let results = meetings.map((meeting) => ({
+      id: meeting._id,
+
+      studentName:
+        meeting.student?.name || "Unknown Student",
+
+      studentEmail:
+        meeting.student?.userId?.email || "",
+
+      studentMajor:
+        meeting.student?.major || "",
+
+      professionalName:
+        meeting.professional?.name || "Unknown Professional",
+
+      professionalEmail:
+        meeting.professional?.userId?.email || "",
+
+      professionalJobTitle:
+        meeting.professional?.jobTitle || "",
+
+      professionalCompany:
+        meeting.professional?.employer || "",
+
+      date: meeting.date,
+      purpose: meeting.purpose,
+      status: meeting.status,
+      notes: meeting.notes,
+
+      // Important: this is the field stored in Meeting.js
+      link: meeting.link || "",
+
+      createdAt: meeting.createdAt,
+      updatedAt: meeting.updatedAt,
+
+      cancelReason: meeting.cancelReason || "",
+      cancelledBy: meeting.cancelledBy || "",
     }));
 
     if (search) {
-      const q = search.toLowerCase();
-      results = results.filter(
-        (r) =>
-          r.studentName.toLowerCase().includes(q) ||
-          r.professionalName.toLowerCase().includes(q) ||
-          r.purpose.toLowerCase().includes(q)
-      );
+      const query = search.toLowerCase();
+
+      results = results.filter((meeting) => {
+        const studentName =
+          meeting.studentName?.toLowerCase() || "";
+
+        const professionalName =
+          meeting.professionalName?.toLowerCase() || "";
+
+        const purpose =
+          meeting.purpose?.toLowerCase() || "";
+
+        return (
+          studentName.includes(query) ||
+          professionalName.includes(query) ||
+          purpose.includes(query)
+        );
+      });
     }
 
-    res.json({ meetings: results });
+    return res.json({
+      meetings: results,
+    });
   } catch (err) {
     console.log("GET ALL MEETINGS ERROR:", err);
-    res.status(500).json({ message: "Server error. Please try again later." });
+
+    return res.status(500).json({
+      message: "Server error. Please try again later.",
+    });
   }
 });
 
+// ===== ADMIN CANCEL MEETING =====
+app.patch(
+  "/api/admin/meetings/:id/cancel",
+  requireAuth,
+  async (req, res) => {
+    try {
+      const adminUser = await User.findById(req.userId);
 
-app.patch("/api/admin/meetings/:id/cancel", requireAuth, async (req, res) => {
+      if (!adminUser || adminUser.role !== "admin") {
+        return res.status(403).json({
+          message: "Only admins can cancel meetings.",
+        });
+      }
+
+      const meeting = await Meeting.findById(req.params.id);
+
+      if (!meeting) {
+        return res.status(404).json({
+          message: "Meeting not found.",
+        });
+      }
+
+      if (meeting.status === "cancelled") {
+        return res.status(400).json({
+          message: "This meeting has already been cancelled.",
+        });
+      }
+
+      meeting.status = "cancelled";
+      meeting.cancelReason = req.body.reason || "";
+      meeting.cancelledBy = "admin";
+
+      await meeting.save();
+
+      return res.json({
+        message: "Meeting cancelled successfully.",
+        meeting,
+      });
+    } catch (err) {
+      console.error("ADMIN CANCEL ERROR:", err);
+
+      return res.status(500).json({
+        message: "Server error.",
+      });
+    }
+  }
+);
+
+app.get("/api/admin/profile", requireAuth, async (req, res) => {
   try {
-    const adminUser = await User.findById(req.userId);
+    const admin = await User.findById(req.userId);
 
-    if (!adminUser || adminUser.role !== "admin") {
+    if (!admin || admin.role !== "admin") {
       return res.status(403).json({
-        message: "Only admins can cancel meetings.",
+        message: "Only admins can access this profile.",
       });
     }
 
-    const meeting = await Meeting.findById(req.params.id);
+    return res.json({
+      profile: {
+        name:
+          admin.name ||
+          admin.fullName ||
+          `${admin.firstName || ""} ${admin.lastName || ""}`.trim() ||
+          "Admin",
 
-    if (!meeting) {
-      return res.status(404).json({
-        message: "Meeting not found.",
-      });
-    }
+        email: admin.email || "",
 
-    if (meeting.status === "cancelled") {
-      return res.status(400).json({
-        message: "This meeting has already been cancelled.",
-      });
-    }
+        profilePicture:
+          admin.profilePicture ||
+          admin.photo ||
+          "",
 
-    meeting.status = "cancelled";
-    meeting.cancelReason = req.body.reason || "";
-    meeting.cancelledBy = "admin";
-
-    await meeting.save();
-
-    res.json({
-      message: "Meeting cancelled successfully.",
-      meeting,
+        role:
+          admin.role,
+      },
     });
   } catch (err) {
-    console.error("ADMIN CANCEL ERROR:", err);
+    console.error("GET ADMIN PROFILE ERROR:", err);
 
-    res.status(500).json({
+    return res.status(500).json({
       message: "Server error.",
     });
   }
