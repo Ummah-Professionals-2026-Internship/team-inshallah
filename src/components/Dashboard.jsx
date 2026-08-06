@@ -193,7 +193,10 @@ export default function Dashboard({
       )}
 
       <main className={styles.main}>
-        <>
+        {children ? (
+          children
+        ) : (
+          <>
             <h1 className={styles.welcome}>Welcome {userName.split(" ")[0]}!</h1>
 
             <div className={styles.grid}>
@@ -295,8 +298,8 @@ export default function Dashboard({
               </div>
             </div>
           </>
+        )}
       </main>
-      {children}
 
       <ChatPanel
         open={chatOpen}
