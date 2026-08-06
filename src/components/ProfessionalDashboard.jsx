@@ -83,7 +83,7 @@ export default function ProfessionalDashboard({ userName = " " }) {
     const token = localStorage.getItem("token");
     if (!token) return;
 
-    fetch("https://d249bo506qtjwa.cloudfront.net/", {
+    fetch(`${API_BASE_URL}/api/meetings`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((res) => (res.ok ? res.json() : { meetings: [] }))

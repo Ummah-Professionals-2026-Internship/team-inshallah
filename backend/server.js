@@ -826,6 +826,64 @@ app.delete("/api/availability", requireAuth, async (req, res) => {
   }
 });
 
+// Creates a Google Calendar event WITH a Meet link, using the professional's
+// connected Google Calendar. Returns the Meet link, or null if it can't.
+async function createMeetLink({ professionalUserId, studentName, professionalName, purpose, startDate }) {
+  const connection = await CalendarConnection.findOne({
+    userId: professionalUserId,
+    provider: "google",
+  });
+  if (!connection) return null; // professional hasn't connected Google — no link
+
+  const userClient = new google.auth.OAuth2(
+    process.env.GOOGLE_CLIENT_ID,
+    process.env.GOOGLE_CLIENT_SECRET,
+    process.env.GOOGLE_REDIRECT_URI
+  );
+  userClient.setCredentials({
+    access_token: decryptToken(connection.accessToken),
+    refresh_token: decryptToken(connection.refreshToken),
+  });
+
+  // persist refreshed tokens (same pattern as the busy-times route)
+  userClient.on("tokens", async (tokens) => {
+    try {
+      const update = {};
+      if (tokens.access_token) update.accessToken = encryptToken(tokens.access_token);
+      if (tokens.refresh_token) update.refreshToken = encryptToken(tokens.refresh_token);
+      if (Object.keys(update).length > 0) {
+        await CalendarConnection.findByIdAndUpdate(connection._id, update);
+      }
+    } catch (e) {
+      console.log("MEET LINK TOKEN SAVE ERROR:", e);
+    }
+  });
+
+  const calendar = google.calendar({ version: "v3", auth: userClient });
+
+  const start = new Date(startDate);
+  const end = new Date(start.getTime() + 60 * 60 * 1000); // 1 hour meeting
+
+  const event = await calendar.events.insert({
+    calendarId: "primary",
+    conferenceDataVersion: 1, // REQUIRED to get a Meet link back
+    requestBody: {
+      summary: `Ummah Professionals: ${purpose || "Meeting"} with ${studentName}`,
+      description: `Meeting between ${studentName} and ${professionalName} via Ummah Professionals.`,
+      start: { dateTime: start.toISOString() },
+      end: { dateTime: end.toISOString() },
+      conferenceData: {
+        createRequest: {
+          requestId: `ump-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          conferenceSolutionKey: { type: "hangoutsMeet" },
+        },
+      },
+    },
+  });
+
+  return event.data.hangoutLink || null;
+}
+
 // ===== POST /api/meetings — book a meeting with a professional =====
 app.post("/api/meetings", requireAuth, async (req, res) => {
   try {
@@ -900,6 +958,25 @@ app.post("/api/meetings", requireAuth, async (req, res) => {
     });
 
 
+    // Try to generate a Google Meet link using the professional's connected calendar.
+    // If they haven't connected Google, this returns null and we just leave link empty.
+    try {
+      const meetLink = await createMeetLink({
+        professionalUserId: professional.user,
+        studentName: student.name,
+        professionalName: professional.name,
+        purpose,
+        startDate: meetingDate,
+      });
+      if (meetLink) {
+        meeting.link = meetLink;
+        await meeting.save();
+      }
+    } catch (linkErr) {
+      console.log("MEET LINK GENERATION ERROR (booking still succeeded):", linkErr);
+    }
+
+  // Send confirmation emails to both parties.
     // Send confirmation emails to both parties.
     // Wrapped so an email failure never breaks a successful booking.
     try {
@@ -1169,7 +1246,7 @@ app.patch("/api/meetings/:id/feedback", requireAuth, async (req, res) => {
 
     meeting.markModified("feedback");
     await meeting.save();
-    
+
     res.json({ message: "Feedback submitted.", meeting });
   } catch (err) {
     console.log("FEEDBACK ERROR:", err);
@@ -1182,7 +1259,7 @@ app.patch("/api/meetings/:id/feedback", requireAuth, async (req, res) => {
 app.get("/api/calendar/google/connect", requireAuth, (req, res) => {
   const authUrl = googleOAuthClient.generateAuthUrl({
     access_type: "offline", // needed to get a refresh token
-    scope: ["https://www.googleapis.com/auth/calendar.readonly"],
+    scope: ["https://www.googleapis.com/auth/calendar.events"],
     state: req.userId, // pass the user's ID through so we know who's connecting when Google sends them back
     prompt: "consent",
   });

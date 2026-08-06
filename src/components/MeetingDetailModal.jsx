@@ -1,5 +1,6 @@
 import { useState } from "react";
 import styles from "./MeetingDetailModal.module.css";
+import { API_BASE_URL } from "../config";
 
 export default function MeetingDetailModal({ meeting, onClose, onReschedule, onCancelled }) {
   const [mode, setMode] = useState("details"); // "details" or "cancel"
@@ -15,7 +16,7 @@ export default function MeetingDetailModal({ meeting, onClose, onReschedule, onC
     try {
       const token = localStorage.getItem("token");
       const res = await fetch(
-        `http://localhost:5050/api/meetings/${meeting.id}/cancel`,
+        `${API_BASE_URL}/api/meetings/${meeting.id}/cancel`,
         {
           method: "PATCH",
           headers: {
