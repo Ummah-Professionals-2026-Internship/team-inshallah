@@ -149,7 +149,6 @@ export default function ViewProfessionals({ onClose, category = "Business" }) {
             linkedin={professional.linkedin}
             website={professional.website}
             github={professional.github}
-            onMoreClick={() => console.log("More clicked for:", professional.name)}
             onCardClick={() => setSelectedProfessional(professional)}
           />
         ))}
