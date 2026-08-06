@@ -126,6 +126,19 @@
   border: none;
   padding: 0;
   cursor: pointer;
+  position: relative;
+}
+
+/* unread marker on the chat bubble, sitting in its lower-right notch */
+.unreadDot {
+  position: absolute;
+  right: 0.15rem;
+  bottom: 0.15rem;
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 50%;
+  background: #e02424;
+  pointer-events: none;
 }
 
 .iconImg {

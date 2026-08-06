@@ -18,7 +18,13 @@ function statusClass(status) {
   }
 }
 
-export default function MeetingTile({ meeting, onClick, onFeedback }) {
+export default function MeetingTile({
+  meeting,
+  onClick,
+  onFeedback,
+  onChat,
+  unreadCount = 0,
+}) {
   const isCancelled = meeting.status === "cancelled";
 
   return (
@@ -49,10 +55,18 @@ export default function MeetingTile({ meeting, onClick, onFeedback }) {
           <button
             type="button"
             className={styles.iconBtn}
-            onClick={(e) => e.stopPropagation()}
-            aria-label="Chat (coming soon)"
+            onClick={(e) => {
+              e.stopPropagation();
+              onChat?.(meeting);
+            }}
+            aria-label={
+              unreadCount > 0
+                ? `Chat with ${meeting.with} — ${unreadCount} unread`
+                : `Chat with ${meeting.with}`
+            }
           >
             <img src={chatIcon} alt="" className={styles.iconImg} />
+            {unreadCount > 0 && <span className={styles.unreadDot} />}
           </button>
 
           {meeting.status === "completed" ? (
