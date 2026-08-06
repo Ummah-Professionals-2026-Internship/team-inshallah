@@ -31,7 +31,15 @@ function formatTimestamp(value) {
   });
 }
 
-export default function ChatPanel({ open, onClose, userRole }) {
+export default function ChatPanel({
+  open,
+  onClose,
+  userRole,
+  // set by a meeting tile's chat button: { meetingId, nonce }. The nonce lets
+  // the same meeting be re-opened on a later click.
+  chatRequest,
+  onInboxChange,
+}) {
   const [conversations, setConversations] = useState([]);
   const [loadingInbox, setLoadingInbox] = useState(true);
   const [inboxError, setInboxError] = useState("");
@@ -49,6 +57,13 @@ export default function ChatPanel({ open, onClose, userRole }) {
 
   const scrollRef = useRef(null);
 
+  // Held in a ref so the pollers below don't restart if the parent passes a new
+  // function identity on every render.
+  const onInboxChangeRef = useRef(onInboxChange);
+  useEffect(() => {
+    onInboxChangeRef.current = onInboxChange;
+  }, [onInboxChange]);
+
   // These update state only from promise callbacks, never synchronously, so
   // they're safe to kick off from an effect. Loading flags are switched on by
   // whichever event handler starts the work.
@@ -57,6 +72,7 @@ export default function ChatPanel({ open, onClose, userRole }) {
       .then((body) => {
         setConversations(body.conversations || []);
         setInboxError("");
+        onInboxChangeRef.current?.(body.conversations || []);
       })
       .catch((err) => {
         // a failed background poll shouldn't replace the list with an error
@@ -110,6 +126,26 @@ export default function ChatPanel({ open, onClose, userRole }) {
     );
     return () => clearInterval(timer);
   }, [active, loadThread, loadInbox]);
+
+  // A meeting tile asked to open its conversation. The backend works out who
+  // the other participant is from the meeting itself, so the tile never has to
+  // — which is what keeps this correct for students and professionals alike.
+  const handledRequestRef = useRef(null);
+  useEffect(() => {
+    if (!open || !chatRequest?.meetingId) return;
+    if (handledRequestRef.current === chatRequest.nonce) return;
+    handledRequestRef.current = chatRequest.nonce;
+
+    openConversation({ meetingId: chatRequest.meetingId })
+      .then((body) => {
+        setActive({ id: body.conversation.id, participant: body.participant });
+        setMessages([]);
+        setDraft("");
+        setThreadError("");
+        setLoadingThread(true);
+      })
+      .catch((err) => setInboxError(err.message));
+  }, [open, chatRequest]);
 
   // keep the newest message in view
   useEffect(() => {
