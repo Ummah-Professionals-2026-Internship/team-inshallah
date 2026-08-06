@@ -23,7 +23,7 @@ export default function ViewProfessionals({ onClose, category = "Business" }) {
     try {
       const params = new URLSearchParams({ page: pageToFetch, limit: 12 });
       if (industry) params.append("industry", industry);
-      if (services) params.append("services", services);
+      if (services) params.append("volunteeringFor", services);
       const res = await fetch(`${API_BASE_URL}/api/professionals?${params}`);
       const data = await res.json();
       setProfessionals((prev) =>
@@ -106,7 +106,7 @@ export default function ViewProfessionals({ onClose, category = "Business" }) {
             onChange={(e) => setServicesFilter(e.target.value)}
           >
             <option value="">Filter by services</option>
-            <option value="Resume Review">Resume Review</option>
+            <option value="Résumé Review">Résumé Review</option>
             <option value="Mock Interview">Mock Interview</option>
             <option value="General Career Advice">General Career Advice</option>
           </select>
@@ -149,7 +149,6 @@ export default function ViewProfessionals({ onClose, category = "Business" }) {
             linkedin={professional.linkedin}
             website={professional.website}
             github={professional.github}
-            onMoreClick={() => console.log("More clicked for:", professional.name)}
             onCardClick={() => setSelectedProfessional(professional)}
           />
         ))}

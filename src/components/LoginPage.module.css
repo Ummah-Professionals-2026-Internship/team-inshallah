@@ -148,12 +148,20 @@
     border: 1.5px solid var(--brand-input-border);
     border-radius: 10px;
     padding: 0 14px;
+    overflow: hidden;
     transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .inputRow:focus-within {
     border-color: var(--brand-primary);
     box-shadow: 0 0 0 3px rgba(0, 124, 166, 0.12);
+}
+
+/* when the browser autofills the input, spread its highlight across the
+   whole row (icon included) instead of just the text field */
+.inputRow:has(.input:autofill),
+.inputRow:has(.input:-webkit-autofill) {
+    background: #e2f2f6;
 }
 
 .inputIcon {
@@ -177,6 +185,25 @@
 .input::placeholder {
     color: var(--brand-placeholder);
     font-family: var(--font-brand);
+}
+
+.input:autofill,
+.input:-webkit-autofill,
+.input:-webkit-autofill:hover,
+.input:-webkit-autofill:focus {
+    -webkit-text-fill-color: var(--brand-text);
+    -webkit-box-shadow: 0 0 0 1000px #e2f2f6 inset;
+    box-shadow: 0 0 0 1000px #e2f2f6 inset;
+    transition: background-color 5000s ease-in-out 0s;
+}
+
+.errorText {
+    margin: -2px 1 1;
+    font-family: var(--font-brand);
+    font-size: 0.86rem;
+    font-weight: 500;
+    color: #c0392b;
+    text-align: center;
 }
 
 .loginBtn {

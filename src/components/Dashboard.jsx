@@ -1,6 +1,8 @@
 // shared dashboard layout - used by both the professional and student dashboards
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import styles from "./Dashboard.module.css";
+import ChatPanel from "./ChatPanel";
+import { fetchConversations } from "../api/messages";
 import logoFull from "../assets/Brand Kit/Logos/PNGs/horizontal white.png";
 import inboxIcon from "../assets/inbox chat button.png";
 import MeetingTile from "./MeetingTile";
@@ -22,10 +24,53 @@ export default function Dashboard({
   children,
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
   const [checked, setChecked] = useState({});
   const [selectedMeeting, setSelectedMeeting] = useState(null);
   const [reschedulingMeeting, setReschedulingMeeting] = useState(null);
   const [feedbackMeeting, setFeedbackMeeting] = useState(null);
+  const [chatRequest, setChatRequest] = useState(null);
+
+  // unread messages per person, so a meeting tile can mark its chat button.
+  // Keyed by the other participant's user id rather than by meeting, because a
+  // pair shares one thread no matter how many meetings they've had.
+  const [unreadByUser, setUnreadByUser] = useState({});
+
+  const applyInbox = useCallback((conversations) => {
+    setUnreadByUser(
+      Object.fromEntries(
+        conversations
+          .filter((c) => c.participant?.id && c.unreadCount)
+          .map((c) => [c.participant.id, c.unreadCount])
+      )
+    );
+  }, []);
+
+  // Seed the badges once on mount. While the panel is open it polls and hands
+  // us fresh counts through onInboxChange, so there's only ever one poller.
+  useEffect(() => {
+    let cancelled = false;
+    fetchConversations()
+      .then((body) => {
+        if (!cancelled) applyInbox(body.conversations || []);
+      })
+      .catch(() => {
+        // badges are cosmetic - a failure here shouldn't disturb the dashboard
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [applyInbox]);
+
+  const openChatForMeeting = (meeting) => {
+    setMenuOpen(false);
+    setChatOpen(true);
+    // the nonce lets the same meeting be re-opened on a later click
+    setChatRequest({ meetingId: meeting.id, nonce: Date.now() });
+  };
+
+  const unreadFor = (meeting) =>
+    (meeting.withUserId && unreadByUser[meeting.withUserId]) || 0;
 
   const toggleTodo = (index) => {
     setChecked((prev) => ({ ...prev, [index]: !prev[index] }));
@@ -115,7 +160,16 @@ export default function Dashboard({
 
       {menuOpen && navLinks.length > 0 && (
         <nav className={styles.navBar}>
-          <button type="button" className={styles.chatIcon} aria-label="Messages">
+          <button
+            type="button"
+            className={styles.chatIcon}
+            aria-label="Messages"
+            aria-expanded={chatOpen}
+            onClick={() => {
+              setMenuOpen(false);
+              setChatOpen((isOpen) => !isOpen);
+            }}
+          >
             <img src={inboxIcon} alt="Messages" className={styles.inboxIcon} />
           </button>
           <div className={styles.navLinks}>
@@ -159,6 +213,8 @@ export default function Dashboard({
                           meeting={meeting}
                           onClick={(m) => setSelectedMeeting(m)}
                           onFeedback={(m) => setFeedbackMeeting(m)}
+                          onChat={openChatForMeeting}
+                          unreadCount={unreadFor(meeting)}
                         />
                       ))
                     )}
@@ -177,6 +233,8 @@ export default function Dashboard({
                           meeting={meeting}
                           onClick={(m) => setSelectedMeeting(m)}
                           onFeedback={(m) => setFeedbackMeeting(m)}
+                          onChat={openChatForMeeting}
+                          unreadCount={unreadFor(meeting)}
                         />
                       ))
                     )}
@@ -243,6 +301,14 @@ export default function Dashboard({
         )}
       </main>
 
+      <ChatPanel
+        open={chatOpen}
+        onClose={() => setChatOpen(false)}
+        userRole={(userRole || "").toLowerCase()}
+        chatRequest={chatRequest}
+        onInboxChange={applyInbox}
+      />
+
       <MeetingDetailModal
         meeting={selectedMeeting}
         onClose={() => setSelectedMeeting(null)}
@@ -250,7 +316,7 @@ export default function Dashboard({
           setReschedulingMeeting(m);
           setSelectedMeeting(null);
         }}
-        onCancelled={(m) => window.location.reload()}
+        onCancelled={() => window.location.reload()}
       />
 
       {reschedulingMeeting && (
@@ -275,7 +341,6 @@ export default function Dashboard({
           onSubmitted={() => window.location.reload()}
         />
       )}
-
     </div>
   );
 }
