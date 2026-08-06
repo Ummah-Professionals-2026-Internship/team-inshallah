@@ -84,7 +84,7 @@ router.post("/signup", async (req, res) => {
 // --- Login ---
 router.post("/login", async (req, res) => {
   try {
-    const { email, password } = req.body ?? {};
+    const { email, password, role } = req.body ?? {};
 
     if (!email || !password) {
       return res
@@ -99,6 +99,14 @@ router.post("/login", async (req, res) => {
     const ok = user && (await bcrypt.compare(password, user.passwordHash));
     if (!ok) {
       return res.status(401).json({ message: "Invalid email or password." });
+    }
+
+    // admins have no dedicated tab, so they can log in from either one.
+    // everyone else must log in from the tab matching their registered role.
+    if (role && user.role !== "admin" && user.role !== role) {
+      return res.status(403).json({
+        message: `This account is registered as a ${user.role}. Please log in from the ${user.role} tab.`,
+      });
     }
 
     return res.json({ user: publicUser(user), token: createToken(user) });

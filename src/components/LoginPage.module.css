@@ -179,6 +179,15 @@
     font-family: var(--font-brand);
 }
 
+.errorText {
+    margin: -2px 1 1;
+    font-family: var(--font-brand);
+    font-size: 0.86rem;
+    font-weight: 500;
+    color: #c0392b;
+    text-align: center;
+}
+
 .loginBtn {
     width: 100%;
     padding: 14px 0;
